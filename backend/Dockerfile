@@ -19,6 +19,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Audiveris OMR Debian release on x86_64 architectures
+RUN if [ "$(uname -m)" = "x86_64" ]; then \
+        echo "Installing Audiveris OMR..." && \
+        curl -sSL "https://github.com/Audiveris/audiveris/releases/download/5.11.0/Audiveris-5.11.0-ubuntu22.04-x86_64.deb" -o /tmp/audiveris.deb && \
+        (dpkg -i /tmp/audiveris.deb || apt-get update && apt-get install -f -y) && \
+        rm -f /tmp/audiveris.deb && \
+        ln -sf /opt/audiveris/bin/Audiveris /usr/local/bin/audiveris || true; \
+    fi
+
 WORKDIR /app
 
 # Copy requirements and install

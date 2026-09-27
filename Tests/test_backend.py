@@ -279,8 +279,8 @@ def test_health_check_engines():
 
 
 def test_advanced_vision_omr_features():
-    """Verify AdvancedVisionOMR recognizes both solid and hollow noteheads and measures."""
-    # Create image with staves, barlines, solid notehead and hollow notehead
+    """Verify AdvancedVisionOMR recognizes both solid and hollow noteheads with exact pitches and durations."""
+    # Create image with staves, barlines, solid notehead (quarter note) and hollow notehead (half note)
     img = Image.new("RGB", (800, 600), color="white")
     draw = ImageDraw.Draw(img)
     # Staves
@@ -300,6 +300,80 @@ def test_advanced_vision_omr_features():
     assert "<score-partwise" in xml_str
     meta = omr_engine.build_midi_and_metadata(xml_str, title="Features Test")
     assert meta["notes_count"] >= 2
-    assert meta["measures_count"] >= 2
+    assert meta["measures_count"] == 2
     assert meta["duration"] > 0
+
+    # Parse and verify exact pitches and rhythm durations
+    parsed_score = music21.converter.parseData(xml_str, format="musicxml")
+    p1 = parsed_score.parts[0]
+    measures = list(p1.getElementsByClass(music21.stream.Measure))
+    assert len(measures) == 2
+
+    # Measure 1 should contain B4 (MIDI 71) with quarterLength 1.0 (quarter note)
+    m1_notes = list(measures[0].notes)
+    assert len(m1_notes) == 1
+    assert m1_notes[0].pitch.midi == 71  # B4
+    assert m1_notes[0].duration.quarterLength == 1.0
+
+    # Measure 2 should contain G4 (MIDI 67) with quarterLength 2.0 (half note)
+    m2_notes = list(measures[1].notes)
+    assert len(m2_notes) == 1
+    assert m2_notes[0].pitch.midi == 67  # G4
+    assert m2_notes[0].duration.quarterLength == 2.0
+
+
+def test_chord_and_polyphony_recognition():
+    """Verify AdvancedVisionOMR recognizes vertically stacked noteheads as polyphonic chords."""
+    img = Image.new("RGB", (800, 600), color="white")
+    draw = ImageDraw.Draw(img)
+    # Staves
+    for y in [150, 170, 190, 210, 230]:
+        draw.line([(50, y), (750, y)], fill="black", width=2)
+    for bx in [50, 400, 750]:
+        draw.line([(bx, 150), (bx, 230)], fill="black", width=2)
+    # Measure 1: Chord E4 (y=230, line 1) and B4 (y=190, line 3) with stem
+    draw.ellipse([(193, 225), (207, 235)], fill="black")
+    draw.ellipse([(193, 185), (207, 195)], fill="black")
+    draw.line([(207, 230), (207, 155)], fill="black", width=2)
+
+    xml_str = omr_engine.AdvancedVisionOMR.process_image(img, title="Chord Test")
+    parsed_score = music21.converter.parseData(xml_str, format="musicxml")
+    p1 = parsed_score.parts[0]
+    m1 = p1.getElementsByClass(music21.stream.Measure)[0]
+
+    chord_objs = list(m1.getElementsByClass(music21.chord.Chord))
+    assert len(chord_objs) == 1
+    chord_pitches = [p.midi for p in chord_objs[0].pitches]
+    assert 64 in chord_pitches  # E4
+    assert 71 in chord_pitches  # B4
+    assert chord_objs[0].duration.quarterLength == 1.0
+
+
+def test_accidental_sharp_recognition():
+    """Verify AdvancedVisionOMR detects sharp (#) without false positives from staff lines."""
+    img = Image.new("RGB", (800, 600), color="white")
+    draw = ImageDraw.Draw(img)
+    for y in [150, 170, 190, 210, 230]:
+        draw.line([(50, y), (750, y)], fill="black", width=2)
+    for bx in [50, 400, 750]:
+        draw.line([(bx, 150), (bx, 230)], fill="black", width=2)
+    # Measure 2: G#4 (sharp at x=530, hollow notehead at x=550, y=210)
+    draw.ellipse([(542, 205), (558, 215)], outline="black", width=2)
+    draw.line([(558, 210), (558, 175)], fill="black", width=2)
+    # Sharp glyph
+    draw.line([(527, 196), (527, 224)], fill="black", width=2)
+    draw.line([(533, 196), (533, 224)], fill="black", width=2)
+    draw.line([(524, 206), (536, 204)], fill="black", width=2)
+    draw.line([(524, 216), (536, 214)], fill="black", width=2)
+
+    xml_str = omr_engine.AdvancedVisionOMR.process_image(img, title="Sharp Test")
+    parsed_score = music21.converter.parseData(xml_str, format="musicxml")
+    p1 = parsed_score.parts[0]
+    m2 = p1.getElementsByClass(music21.stream.Measure)[1]
+    m2_notes = list(m2.notes)
+    assert len(m2_notes) == 1
+    # G#4 is MIDI 68
+    assert m2_notes[0].pitch.midi == 68
+    assert m2_notes[0].duration.quarterLength == 2.0
+
 

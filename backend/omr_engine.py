@@ -35,7 +35,12 @@ logging.basicConfig(level=logging.INFO)
 
 # 1. Audiveris OMR CLI / Docker availability
 AUDIVERIS_AVAILABLE = False
-AUDIVERIS_BIN = os.environ.get("AUDIVERIS_BIN") or shutil.which("audiveris")
+AUDIVERIS_BIN = (
+    os.environ.get("AUDIVERIS_BIN")
+    or shutil.which("audiveris")
+    or shutil.which("Audiveris")
+    or ("/opt/audiveris/bin/Audiveris" if os.path.exists("/opt/audiveris/bin/Audiveris") else None)
+)
 if AUDIVERIS_BIN:
     AUDIVERIS_AVAILABLE = True
 
@@ -363,17 +368,19 @@ def run_cloud_ai_transcription(image: Image.Image) -> Optional[str]:
 
 class AdvancedVisionOMR:
     """
-    High-accuracy pure-Python/OpenCV feature extraction OMR engine.
+    High-accuracy pure-Python feature extraction OMR engine.
     Solves all failure modes on high-definition sheet music scans:
-    - Adaptive local contrast binarization (Sauvola/Bradley style via box blur)
-    - Full-resolution dynamic staff line spacing (no 60px cap; supports 6px to 200px)
+    - Adaptive local contrast binarization (Sauvola/Bradley style via dynamic box blur)
+    - Full-resolution dynamic staff line spacing (no 60px cap; supports 6px to 220px)
     - Detects ALL staves across the entire page, grouping into Grand Staff systems
     - Vertical projection barline detection for true measure segmentation
-    - Clef detection (Treble vs Bass) and Key Signature detection (counting accidentals)
-    - Vertical run-length staff line filtering: preserves noteheads on staff lines
-    - Dual Solid AND Hollow notehead recognition (half notes and whole notes)
-    - Stem and beam detection for precise rhythm durations (whole, half, quarter, 8th, 16th)
-    - Accidental detection (#, b, ♮) directly modifying MIDI pitches
+    - Key Signature detection (counting accidentals at staff head)
+    - Target continuous vertical run-length staff line inpainting
+    - Dual Solid AND Hollow notehead recognition with hole filling
+    - Horizontal run-length stem removal separating noteheads from stems and chords
+    - Polyphonic chord detection (groups concurrent notes into music21.chord.Chord)
+    - Robust window-based stem detection (half notes vs whole notes)
+    - Accidental detection on line-free regions (no false positives from staff lines)
     """
 
     @classmethod
@@ -392,10 +399,11 @@ class AdvancedVisionOMR:
         logger.info(f"AdvancedVisionOMR: Processing {w}x{h} sheet music image.")
 
         # 1. Adaptive Binarization:
-        # Fast local running average using Pillow's BoxBlur in C
-        blurred = np.array(Image.fromarray(arr).filter(ImageFilter.BoxBlur(12)))
+        # Scale BoxBlur radius dynamically to score size (e.g. 10 to 35px)
+        blur_r = max(8, min(40, int(min(w, h) / 75)))
+        blurred = np.array(Image.fromarray(arr).filter(ImageFilter.BoxBlur(blur_r)))
         local_thresh = np.maximum(35, blurred.astype(np.int16) - 16)
-        
+
         # Otsu global threshold as safety ceiling
         hist, _ = np.histogram(arr, bins=256, range=(0, 256))
         total_px = arr.size
@@ -437,14 +445,14 @@ class AdvancedVisionOMR:
 
         logger.info(f"AdvancedVisionOMR: Detected {len(staff_lines)} staff line candidates.")
 
-        # Group lines into 5-line staves (spacing range 6-180 px for high-DPI scans)
+        # Group lines into 5-line staves (spacing range 6-220 px for high-DPI scans)
         staves: List[List[int]] = []
         i = 0
         while i <= len(staff_lines) - 5:
             sub = staff_lines[i:i + 5]
             diffs = [sub[j + 1] - sub[j] for j in range(4)]
             avg_sp = float(np.mean(diffs))
-            if all(abs(d - avg_sp) < avg_sp * 0.38 for d in diffs) and 6 <= avg_sp <= 180:
+            if all(abs(d - avg_sp) < avg_sp * 0.38 for d in diffs) and 6 <= avg_sp <= 220:
                 staves.append(sub)
                 i += 5
             else:
@@ -454,24 +462,48 @@ class AdvancedVisionOMR:
 
         # Diatonic pitch lookup tables
         TREBLE_DIATONIC = [64, 65, 67, 69, 71, 72, 74, 76, 77, 79, 81, 83, 84]
+        TREBLE_LETTERS  = ['E', 'F', 'G', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'A', 'B', 'C']
         TREBLE_BELOW    = [62, 60, 59, 57, 55]   # D4, C4 (ledger), B3, A3, G3
-        BASS_DIATONIC   = [43, 45, 47, 48, 50, 52, 53, 55, 57, 59, 60, 62, 64]
-        BASS_BELOW      = [41, 40, 38, 36]        # F2, E2, D2, C2
+        TREBLE_BELOW_L  = ['D', 'C', 'B', 'A', 'G']
 
-        def staff_pos_to_midi(pos: float, is_treble: bool) -> int:
+        BASS_DIATONIC   = [43, 45, 47, 48, 50, 52, 53, 55, 57, 59, 60, 62, 64]
+        BASS_LETTERS    = ['G', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'A', 'B', 'C', 'D', 'E']
+        BASS_BELOW      = [41, 40, 38, 36]        # F2, E2, D2, C2
+        BASS_BELOW_L    = ['F', 'E', 'D', 'C']
+
+        SHARP_ORDER = ['F', 'C', 'G', 'D', 'A', 'E', 'B']
+        FLAT_ORDER  = ['B', 'E', 'A', 'D', 'G', 'C', 'F']
+
+        def staff_pos_to_midi(pos: float, is_treble: bool, key_fifths: int = 0) -> int:
             rounded = int(round(pos * 2.0))
             if is_treble:
                 if 0 <= rounded < len(TREBLE_DIATONIC):
-                    return TREBLE_DIATONIC[rounded]
+                    base = TREBLE_DIATONIC[rounded]
+                    letter = TREBLE_LETTERS[rounded]
                 elif rounded < 0 and -rounded <= len(TREBLE_BELOW):
-                    return TREBLE_BELOW[-rounded - 1]
-                return max(21, min(108, 64 + rounded))
+                    base = TREBLE_BELOW[-rounded - 1]
+                    letter = TREBLE_BELOW_L[-rounded - 1]
+                else:
+                    base = max(21, min(108, 64 + rounded))
+                    letter = 'C'
             else:
                 if 0 <= rounded < len(BASS_DIATONIC):
-                    return BASS_DIATONIC[rounded]
+                    base = BASS_DIATONIC[rounded]
+                    letter = BASS_LETTERS[rounded]
                 elif rounded < 0 and -rounded <= len(BASS_BELOW):
-                    return BASS_BELOW[-rounded - 1]
-                return max(21, min(108, 43 + rounded))
+                    base = BASS_BELOW[-rounded - 1]
+                    letter = BASS_BELOW_L[-rounded - 1]
+                else:
+                    base = max(21, min(108, 43 + rounded))
+                    letter = 'C'
+
+            # Apply key signature fifths alteration
+            if key_fifths > 0 and letter in SHARP_ORDER[:key_fifths]:
+                base += 1
+            elif key_fifths < 0 and letter in FLAT_ORDER[:-key_fifths]:
+                base -= 1
+
+            return max(21, min(108, base))
 
         # 3. Group Staves into Systems (Grand Staff pairs or Single Staves)
         systems: List[Dict[str, Any]] = []
@@ -479,13 +511,13 @@ class AdvancedVisionOMR:
         while s_idx < len(staves):
             treble_staff = staves[s_idx]
             treble_sp = float(np.mean([treble_staff[k+1] - treble_staff[k] for k in range(4)]))
-            
+
             # Check for grand staff partner
             if s_idx + 1 < len(staves):
                 bass_staff = staves[s_idx + 1]
                 bass_sp = float(np.mean([bass_staff[k+1] - bass_staff[k] for k in range(4)]))
                 inter_gap = bass_staff[0] - treble_staff[4]
-                
+
                 if treble_sp * 1.0 <= inter_gap <= treble_sp * 8.0:
                     systems.append({
                         "treble": treble_staff,
@@ -494,7 +526,7 @@ class AdvancedVisionOMR:
                     })
                     s_idx += 2
                     continue
-                    
+
             systems.append({
                 "treble": treble_staff,
                 "bass": None,
@@ -504,54 +536,82 @@ class AdvancedVisionOMR:
 
         logger.info(f"AdvancedVisionOMR: Formed {len(systems)} musical system(s).")
 
-        # 4. Process each system: barlines, noteheads, rhythms, and accidentals
+        # 4. Key Signature Analysis (Examine initial key signature region of system 1)
+        detected_fifths = 0
+        if systems:
+            sys0 = systems[0]
+            t_lines = sys0["treble"]
+            sys_sp = sys0["sp"]
+            t_top = max(0, int(t_lines[0] - sys_sp * 1.5))
+            t_bot = min(h - 1, int(t_lines[4] + sys_sp * 1.5))
+            # Region after clef (~2.2 * sp to ~6.0 * sp)
+            clef_start = int(w * 0.05)
+            key_x1 = int(clef_start + sys_sp * 2.0)
+            key_x2 = min(w - 1, int(clef_start + sys_sp * 6.5))
+            if key_x2 > key_x1 + int(sys_sp):
+                key_patch = binary[t_top:t_bot, key_x1:key_x2]
+                col_dens = np.sum(key_patch, axis=0) / float(max(1, t_bot - t_top))
+                stroke_cols = np.where(col_dens >= 0.35)[0]
+                if len(stroke_cols) >= 2:
+                    # Count clusters of vertical strokes
+                    clusters = 0
+                    prev = -99
+                    for sc in stroke_cols:
+                        if sc > prev + int(sys_sp * 0.3):
+                            clusters += 1
+                        prev = sc
+                    if clusters >= 2:
+                        detected_fifths = min(7, max(1, clusters // 2))
+
+        logger.info(f"AdvancedVisionOMR: Detected key signature fifths: {detected_fifths}")
+
+        # 5. Process each system: barlines, noteheads, rhythms, and accidentals
         all_rh_measures: List[List[Dict[str, Any]]] = []
         all_lh_measures: List[List[Dict[str, Any]]] = []
-        
-        # Track key signature and time signature
-        detected_fifths = 0
 
         for sys_idx, sys_obj in enumerate(systems):
             treble_lines = sys_obj["treble"]
             bass_lines = sys_obj["bass"]
             sp = sys_obj["sp"]
-            
-            # Detect barlines by finding vertical strokes crossing the staff lines
-            top_y = treble_lines[0]
-            bot_y = bass_lines[4] if bass_lines else treble_lines[4]
-            sys_h = bot_y - top_y
-            
-            # Vertical density in treble staff band
-            tr_h = treble_lines[4] - treble_lines[0]
-            tr_density = np.sum(binary[treble_lines[0]:treble_lines[4]+1, :], axis=0) / float(max(1, tr_h))
-            
+
+            # True barline detection: must span from top line to bottom line and not have attached noteheads
+            tr_top = treble_lines[0]
+            tr_bot = treble_lines[4]
+            tr_h = tr_bot - tr_top
+
+            top_band = np.any(binary[max(0, tr_top - 2):min(h, tr_top + 3), :], axis=0)
+            bot_band = np.any(binary[max(0, tr_bot - 2):min(h, tr_bot + 3), :], axis=0)
+            tr_density = np.sum(binary[tr_top:tr_bot + 1, :], axis=0) / float(max(1, tr_h))
+
             if bass_lines:
-                bs_h = bass_lines[4] - bass_lines[0]
-                bs_density = np.sum(binary[bass_lines[0]:bass_lines[4]+1, :], axis=0) / float(max(1, bs_h))
-                bar_cols = np.where((tr_density > 0.55) | (bs_density > 0.55))[0]
+                bs_top = bass_lines[0]
+                bs_bot = bass_lines[4]
+                bs_h = bs_bot - bs_top
+                bs_top_band = np.any(binary[max(0, bs_top - 2):min(h, bs_top + 3), :], axis=0)
+                bs_bot_band = np.any(binary[max(0, bs_bot - 2):min(h, bs_bot + 3), :], axis=0)
+                bs_density = np.sum(binary[bs_top:bs_bot + 1, :], axis=0) / float(max(1, bs_h))
+                cand_cols = np.where(((top_band & bot_band & (tr_density >= 0.65)) | (bs_top_band & bs_bot_band & (bs_density >= 0.65))))[0]
             else:
-                bar_cols = np.where(tr_density > 0.55)[0]
+                cand_cols = np.where(top_band & bot_band & (tr_density >= 0.65))[0]
 
-            # Cluster barline columns
+            # Filter out note stems: a true barline does NOT have a wide notehead attached
             barlines: List[int] = []
-            if len(bar_cols) > 0:
-                c = [bar_cols[0]]
-                for bx in bar_cols[1:]:
-                    if bx <= c[-1] + 3:
-                        c.append(bx)
-                    else:
-                        barlines.append(int(np.mean(c)))
-                        c = [bx]
-                barlines.append(int(np.mean(c)))
+            check_lines = treble_lines + (bass_lines if bass_lines else [])
+            for bc in cand_cols:
+                x_start = max(0, int(bc - sp * 0.6))
+                x_end = min(w, int(bc + sp * 0.6))
+                patch = binary[tr_top:tr_bot + 1, x_start:x_end]
+                row_sums = [patch[r, :].sum() for r in range(patch.shape[0]) if not any(abs((tr_top + r) - sy) <= 2 for sy in check_lines)]
+                max_w = max(row_sums) if row_sums else 0
+                if max_w <= int(sp * 0.38):
+                    barlines.append(int(bc))
 
-            # Keep barlines separated by at least 4 * sp
-            min_meas_w = int(sp * 4.0)
+            min_meas_w = int(sp * 3.5)
             clean_bars = []
             for b in barlines:
                 if not clean_bars or (b - clean_bars[-1]) >= min_meas_w:
                     clean_bars.append(b)
 
-            # If fewer than 2 barlines found, segment into 4 equal measures
             if len(clean_bars) < 2:
                 start_x = int(w * 0.08)
                 end_x = int(w * 0.94)
@@ -567,121 +627,184 @@ class AdvancedVisionOMR:
                 s_top = max(0, int(staff_ys[0] - staff_sp * 2.8))
                 s_bot = min(h - 1, int(staff_ys[4] + staff_sp * 2.8))
                 bottom_line = staff_ys[4]
-                
-                roi = binary[s_top:s_bot, :].copy()
-                roi_h, roi_w = roi.shape
-                
-                # Vertical run-length staff line inpainting:
-                # Does NOT erase noteheads! Only removes pixels whose vertical run is <= line_max_thick
-                line_max_thick = max(2, int(round(staff_sp * 0.18)))
-                cleaned = roi.copy()
-                for y in range(line_max_thick, roi_h - line_max_thick):
-                    thin = roi[y, :] & (~roi[y - line_max_thick, :]) & (~roi[y + line_max_thick, :])
-                    cleaned[y, thin] = False
 
                 measures_notes: List[List[Dict[str, Any]]] = []
 
                 for m in range(len(clean_bars) - 1):
-                    x1 = max(0, clean_bars[m] + int(staff_sp * 0.3))
-                    x2 = min(w - 1, clean_bars[m + 1] - int(staff_sp * 0.2))
-                    if x2 <= x1 + int(staff_sp):
+                    x1 = max(0, clean_bars[m] + int(staff_sp * 0.25))
+                    x2 = min(w - 1, clean_bars[m + 1] - int(staff_sp * 0.15))
+                    if x2 <= x1 + int(staff_sp * 1.5):
                         measures_notes.append([])
                         continue
-                        
-                    meas_slice = cleaned[:, x1:x2]
-                    col_dens = np.sum(meas_slice, axis=0)
-                    min_col_th = max(2, int(round(staff_sp * 0.18)))
-                    cand_cols = np.where(col_dens >= min_col_th)[0]
 
+                    roi = binary[s_top:s_bot, x1:x2].copy()
+                    roi_h, roi_w = roi.shape
+                    if roi_h < 10 or roi_w < 10:
+                        measures_notes.append([])
+                        continue
+
+                    # Hole filling for hollow noteheads (half notes and whole notes)
+                    inv = ~roi
+                    visited_bg = np.zeros_like(inv, dtype=bool)
+                    q = []
+                    for r in range(roi_h):
+                        if inv[r, 0]: q.append((r, 0)); visited_bg[r, 0] = True
+                        if inv[r, roi_w - 1]: q.append((r, roi_w - 1)); visited_bg[r, roi_w - 1] = True
+                    for c in range(roi_w):
+                        if inv[0, c] and not visited_bg[0, c]: q.append((0, c)); visited_bg[0, c] = True
+                        if inv[roi_h - 1, c] and not visited_bg[roi_h - 1, c]: q.append((roi_h - 1, c)); visited_bg[roi_h - 1, c] = True
+                    head = 0
+                    while head < len(q):
+                        cr, cc = q[head]; head += 1
+                        for dr, dc in [(-1,0),(1,0),(0,-1),(0,1)]:
+                            nr, nc = cr + dr, cc + dc
+                            if 0 <= nr < roi_h and 0 <= nc < roi_w and inv[nr, nc] and not visited_bg[nr, nc]:
+                                visited_bg[nr, nc] = True; q.append((nr, nc))
+                    filled_holes = inv & (~visited_bg)
+                    filled_roi = roi | filled_holes
+
+                    # Vertical run-length computation on filled_roi & roi
+                    v_run = np.zeros_like(filled_roi, dtype=int)
+                    for c in range(roi_w):
+                        run = 0
+                        for r in range(roi_h):
+                            if filled_roi[r, c]: run += 1; v_run[r, c] = run
+                            else: run = 0
+                        max_r = 0
+                        for r in range(roi_h - 1, -1, -1):
+                            if v_run[r, c] > 0: max_r = max(max_r, v_run[r, c]); v_run[r, c] = max_r
+                            else: max_r = 0
+
+                    staff_y_in_roi = [sy - s_top for sy in staff_ys]
+                    line_max_thick = max(2, int(round(staff_sp * 0.12)))
+
+                    cleaned = roi.copy()
+                    filled_cleaned = filled_roi.copy()
+                    for sy in staff_y_in_roi:
+                        for dy in range(-line_max_thick, line_max_thick + 1):
+                            y = sy + dy
+                            if 0 <= y < roi_h:
+                                is_staff = (v_run[y, :] <= line_max_thick)
+                                cleaned[y, is_staff] = False
+                                filled_cleaned[y, is_staff] = False
+
+                    # Horizontal run-length on filled_cleaned to remove thin vertical stems
+                    h_run = np.zeros_like(filled_cleaned, dtype=int)
+                    for r in range(roi_h):
+                        run = 0
+                        for c in range(roi_w):
+                            if filled_cleaned[r, c]: run += 1; h_run[r, c] = run
+                            else: run = 0
+                        max_r = 0
+                        for c in range(roi_w - 1, -1, -1):
+                            if h_run[r, c] > 0: max_r = max(max_r, h_run[r, c]); h_run[r, c] = max_r
+                            else: max_r = 0
+
+                    # Notehead mask: pixels having horizontal run >= staff_sp * 0.40
+                    min_run_th = max(3, int(round(staff_sp * 0.40)))
+                    nh_mask = filled_cleaned & (h_run >= min_run_th)
+
+                    # 2D Connected Components on nh_mask
+                    visited = np.zeros_like(nh_mask, dtype=bool)
                     meas_nh: List[Dict[str, Any]] = []
-                    ci = 0
-                    while ci < len(cand_cols):
-                        c = [cand_cols[ci]]
-                        while ci + 1 < len(cand_cols) and cand_cols[ci+1] - cand_cols[ci] <= 3:
-                            ci += 1
-                            c.append(cand_cols[ci])
-                        ci += 1
-                        
-                        cluster_w = c[-1] - c[0] + 1
-                        if cluster_w < max(2, int(staff_sp * 0.25)) or cluster_w > int(staff_sp * 2.4):
-                            continue
-                            
-                        cx_local = int(np.mean(c))
-                        cx_global = x1 + cx_local
-                        
-                        # Find vertical centroid in a window around cx_local
-                        wx1 = max(0, cx_local - 2)
-                        wx2 = min(meas_slice.shape[1], cx_local + 3)
-                        sub_strip = meas_slice[:, wx1:wx2]
-                        if sub_strip.sum() < 2:
-                            continue
-                            
-                        cy_local = float(np.dot(sub_strip.sum(axis=1), np.arange(roi_h)) / sub_strip.sum())
-                        cy_global = s_top + cy_local
-                        
-                        # Pitch calculation
-                        pos = (bottom_line - cy_global) / staff_sp
-                        base_midi = staff_pos_to_midi(pos, is_treble)
-                        
-                        # Duration & classification (Solid vs Hollow vs Stems)
-                        # Check bounding box around notehead
-                        bx1 = max(0, cx_local - int(staff_sp * 0.6))
-                        bx2 = min(meas_slice.shape[1], cx_local + int(staff_sp * 0.6))
-                        by1 = max(0, int(cy_local - staff_sp * 0.5))
-                        by2 = min(roi_h, int(cy_local + staff_sp * 0.5))
-                        
-                        nh_box = meas_slice[by1:by2, bx1:bx2]
-                        fill_ratio = np.mean(nh_box) if nh_box.size > 0 else 0.5
-                        
-                        # Check stem: vertical stroke above right or below left
-                        stem_up = False
-                        stem_dn = False
-                        if by1 > int(staff_sp * 1.5):
-                            up_strip = roi[max(0, by1 - int(staff_sp * 2.5)):by1, min(roi_w-1, cx_global + int(staff_sp*0.4))]
-                            stem_up = (np.sum(up_strip) > staff_sp * 1.0)
-                        if by2 + int(staff_sp * 1.5) < roi_h:
-                            dn_strip = roi[by2:min(roi_h, by2 + int(staff_sp * 2.5)), max(0, cx_global - int(staff_sp*0.4))]
-                            stem_dn = (np.sum(dn_strip) > staff_sp * 1.0)
-                        has_stem = stem_up or stem_dn
-                        
-                        # Hollow vs solid:
-                        is_hollow = (fill_ratio < 0.38 and cluster_w >= int(staff_sp * 0.7))
-                        if is_hollow:
-                            duration_beats = 2.0 if has_stem else 4.0
-                        else:
-                            # Solid notehead: check for beams / flags
-                            duration_beats = 1.0 # Quarter note default
-                            
-                        # Accidental detection: look to the left
-                        acc_offset = 0
-                        acc_x1 = max(0, cx_global - int(staff_sp * 1.8))
-                        acc_x2 = max(0, cx_global - int(staff_sp * 0.6))
-                        acc_y1 = max(0, int(cy_global - staff_sp * 0.7))
-                        acc_y2 = min(h - 1, int(cy_global + staff_sp * 0.7))
-                        if acc_x2 > acc_x1 + 2 and acc_y2 > acc_y1 + 2:
-                            acc_roi = binary[acc_y1:acc_y2, acc_x1:acc_x2]
-                            if np.sum(acc_roi) > staff_sp * 1.2:
-                                # Determine sharp (+1) or flat (-1)
-                                top_half = np.sum(acc_roi[:acc_roi.shape[0]//2, :])
-                                bot_half = np.sum(acc_roi[acc_roi.shape[0]//2:, :])
-                                acc_offset = -1 if top_half > bot_half * 1.4 else 1
 
-                        final_midi = max(21, min(108, base_midi + acc_offset))
-                        meas_nh.append({
-                            "cx": cx_global,
-                            "midi": final_midi,
-                            "duration": duration_beats,
-                            "rel_x": (cx_global - clean_bars[m]) / float(clean_bars[m+1] - clean_bars[m])
-                        })
+                    for r in range(roi_h):
+                        for c in range(roi_w):
+                            if nh_mask[r, c] and not visited[r, c]:
+                                q_cc = [(r, c)]
+                                visited[r, c] = True
+                                head_cc = 0
+                                pts = []
+                                while head_cc < len(q_cc):
+                                    cr, cc = q_cc[head_cc]; head_cc += 1
+                                    pts.append((cr, cc))
+                                    for dr, dc in [(-1,0),(1,0),(0,-1),(0,1)]:
+                                        nr, nc = cr + dr, cc + dc
+                                        if 0 <= nr < roi_h and 0 <= nc < roi_w and nh_mask[nr, nc] and not visited[nr, nc]:
+                                            visited[nr, nc] = True
+                                            q_cc.append((nr, nc))
+                                pts_arr = np.array(pts)
+                                bw = pts_arr[:, 1].max() - pts_arr[:, 1].min() + 1
+                                bh = pts_arr[:, 0].max() - pts_arr[:, 0].min() + 1
+                                area = len(pts)
 
-                    meas_nh.sort(key=lambda n: n["cx"])
-                    measures_notes.append(meas_nh)
+                                # Valid notehead geometric filter (aspect ratio >= 0.70, height <= 1.15 * sp)
+                                aspect = bw / float(max(1, bh))
+                                if bw >= staff_sp * 0.35 and bw <= staff_sp * 2.2 and bh >= staff_sp * 0.30 and bh <= staff_sp * 1.15 and aspect >= 0.70 and area >= max(6, int(staff_sp * staff_sp * 0.10)):
+                                    cx_l = int(round(np.mean(pts_arr[:, 1])))
+                                    cy_l = int(round(np.mean(pts_arr[:, 0])))
+                                    cx_global = x1 + cx_l
+                                    cy_global = s_top + cy_l
+
+                                    # Diatonic pitch
+                                    pos = (bottom_line - cy_global) / staff_sp
+                                    base_midi = staff_pos_to_midi(pos, is_treble, key_fifths=detected_fifths)
+
+                                    # Check hollow vs solid via center density in cleaned
+                                    center_p = cleaned[max(0, cy_l - int(staff_sp * 0.15)):min(roi_h, cy_l + int(staff_sp * 0.15) + 1), max(0, cx_l - int(staff_sp * 0.15)):min(roi_w, cx_l + int(staff_sp * 0.15) + 1)]
+                                    center_density = float(np.mean(center_p)) if center_p.size > 0 else 1.0
+                                    is_hollow = bool(center_density < 0.45 or filled_holes[cy_l, cx_l])
+
+                                    # Stem check
+                                    up_patch = roi[max(0, int(cy_l - 2.5 * staff_sp)):max(0, int(cy_l - 0.3 * staff_sp)), max(0, int(cx_l + 0.15 * staff_sp)):min(roi_w, int(cx_l + 0.65 * staff_sp))]
+                                    dn_patch = roi[min(roi_h, int(cy_l + 0.3 * staff_sp)):min(roi_h, int(cy_l + 2.5 * staff_sp)), max(0, int(cx_l - 0.65 * staff_sp)):min(roi_w, int(cx_l - 0.15 * staff_sp))]
+                                    has_stem_up = bool(np.any(np.sum(up_patch, axis=0) >= staff_sp * 0.8)) if up_patch.size > 0 else False
+                                    has_stem_dn = bool(np.any(np.sum(dn_patch, axis=0) >= staff_sp * 0.8)) if dn_patch.size > 0 else False
+                                    has_stem = has_stem_up or has_stem_dn
+
+                                    if is_hollow:
+                                        dur = 2.0 if has_stem else 4.0
+                                    else:
+                                        dur = 1.0
+
+                                    # Accidental check in cleaned (staff lines removed!)
+                                    acc_x1 = max(0, int(cx_l - 1.8 * staff_sp))
+                                    acc_x2 = max(0, int(cx_l - 0.45 * staff_sp))
+                                    acc_y1 = max(0, int(cy_l - 0.7 * staff_sp))
+                                    acc_y2 = min(roi_h, int(cy_l + 0.7 * staff_sp))
+                                    acc_patch = cleaned[acc_y1:acc_y2, acc_x1:acc_x2]
+                                    acc_offset = 0
+                                    if acc_patch.size > 0 and acc_patch.sum() >= staff_sp * 1.5:
+                                        top_h = np.sum(acc_patch[:acc_patch.shape[0]//2, :])
+                                        bot_h = np.sum(acc_patch[acc_patch.shape[0]//2:, :])
+                                        acc_offset = -1 if top_h > bot_h * 1.4 else 1
+
+                                    final_midi = max(21, min(108, base_midi + acc_offset))
+
+                                    meas_nh.append({
+                                        "cx": cx_global,
+                                        "cy": cy_global,
+                                        "midi": final_midi,
+                                        "acc_offset": acc_offset,
+                                        "duration": dur,
+                                        "rel_x": (cx_global - clean_bars[m]) / float(clean_bars[m+1] - clean_bars[m])
+                                    })
+
+                    # Deduplicate accidental glyphs that were detected as blobs immediately preceding a notehead
+                    meas_nh.sort(key=lambda n: n["cx"], reverse=True)
+                    acc_indices = set()
+                    for i, note in enumerate(meas_nh):
+                        if i in acc_indices:
+                            continue
+                        for j in range(i + 1, len(meas_nh)):
+                            cand = meas_nh[j]
+                            dx = note["cx"] - cand["cx"]
+                            dy = abs(note["cy"] - cand["cy"])
+                            if staff_sp * 0.40 <= dx <= staff_sp * 2.2 and dy <= staff_sp * 0.85:
+                                acc_indices.add(j)
+                                if note.get("acc_offset", 0) == 0:
+                                    note["midi"] = max(21, min(108, note["midi"] + 1))
+                                    note["acc_offset"] = 1
+
+                    clean_nh = [n for idx, n in enumerate(meas_nh) if idx not in acc_indices]
+                    clean_nh.sort(key=lambda n: (n["cx"], n["midi"]))
+                    measures_notes.append(clean_nh)
 
                 return measures_notes
 
             rh_meas = extract_notes_from_staff(treble_lines, is_treble=True)
             all_rh_measures.extend(rh_meas)
-            
+
             if bass_lines:
                 lh_meas = extract_notes_from_staff(bass_lines, is_treble=False)
                 all_lh_measures.extend(lh_meas)
@@ -705,7 +828,7 @@ class AdvancedVisionOMR:
                 for m in range(num_meas)
             ]
 
-        # 5. Build music21 Score
+        # 6. Build music21 Score
         score = music21.stream.Score()
         score.metadata = music21.metadata.Metadata()
         score.metadata.title = title
@@ -722,6 +845,7 @@ class AdvancedVisionOMR:
 
         num_total_measures = max(len(all_rh_measures), len(all_lh_measures))
         beats_per_meas = 4.0
+        avg_sys_sp = systems[0]["sp"] if systems else 20.0
 
         for m_idx in range(num_total_measures):
             m_num = m_idx + 1
@@ -743,16 +867,32 @@ class AdvancedVisionOMR:
                     m_obj.append(music21.note.Rest(quarterLength=beats_per_meas))
                     return
 
-                used_beats = 0.0
+                # Group notes with similar CX into simultaneous chords
+                chord_groups: List[List[Dict[str, Any]]] = []
                 for n_info in notes_list:
+                    placed = False
+                    for grp in chord_groups:
+                        if abs(n_info["cx"] - grp[0]["cx"]) <= avg_sys_sp * 0.45:
+                            # Avoid identical duplicate pitches in same chord
+                            if not any(g["midi"] == n_info["midi"] for g in grp):
+                                grp.append(n_info)
+                            placed = True
+                            break
+                    if not placed:
+                        chord_groups.append([n_info])
+
+                used_beats = 0.0
+                for grp in chord_groups:
                     if used_beats >= beats_per_meas:
                         break
-                    dur = min(n_info["duration"], beats_per_meas - used_beats)
-                    p = music21.pitch.Pitch()
-                    p.midi = n_info["midi"]
-                    n = music21.note.Note(quarterLength=dur)
-                    n.pitch = p
-                    m_obj.append(n)
+                    dur = min(grp[0]["duration"], beats_per_meas - used_beats)
+                    if len(grp) == 1:
+                        n = music21.note.Note(quarterLength=dur)
+                        n.pitch.midi = grp[0]["midi"]
+                        m_obj.append(n)
+                    else:
+                        ch = music21.chord.Chord([g["midi"] for g in grp], quarterLength=dur)
+                        m_obj.append(ch)
                     used_beats += dur
 
                 rem = beats_per_meas - used_beats

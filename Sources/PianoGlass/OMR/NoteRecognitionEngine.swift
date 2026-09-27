@@ -474,17 +474,21 @@ public final class NoteRecognitionEngine {
         noteheads.sort { $0.centroidX < $1.centroidX }
         
         var noteEvents = [NoteEvent]()
-        var lastNoteX: CGFloat = -999.0
         let minNoteGap = sp * 0.55
         
         for nh in noteheads {
             let globalX = CGFloat(leftBound) + CGFloat(nh.centroidX)
             let globalY = CGFloat(topBound) + CGFloat(nh.centroidY)
             
-            if abs(globalX - lastNoteX) < minNoteGap {
+            // Allow polyphonic chords with stacked notes at same X, avoiding only exact duplicate detections
+            let isDuplicate = noteEvents.contains { existing in
+                let dx = abs(globalX - existing.boundingBox.midX)
+                let dy = abs(globalY - existing.boundingBox.midY)
+                return dx < minNoteGap && dy < sp * 0.4
+            }
+            if isDuplicate {
                 continue
             }
-            lastNoteX = globalX
             
             // Exact diatonic staff position math:
             // bottomLineY is in image coordinates (Y increases downward)
@@ -497,44 +501,53 @@ public final class NoteRecognitionEngine {
             let bh = CGFloat(nh.maxY - nh.minY + 1)
             let fillRatio = Double(nh.pixelCount) / Double(max(1.0, bw * bh))
             
-            // Stem check in original binary: check above or below notehead
+            // Stem check in original binary across a horizontal window
             let nhMidX = Int(nh.centroidX)
             let nhMinY = nh.minY
             let nhMaxY = nh.maxY
             var hasStem = false
             
             // Check stem above right
-            let stemUpX = min(roiWidth - 1, nhMidX + Int(sp * 0.35))
-            if nhMinY > Int(sp * 1.5) {
-                var upDark = 0
+            let upX1 = max(0, nhMidX + Int(sp * 0.15))
+            let upX2 = min(roiWidth - 1, nhMidX + Int(sp * 0.65))
+            if nhMinY > Int(sp * 1.2) {
                 let upStart = max(0, nhMinY - Int(sp * 2.5))
-                for sy in upStart..<nhMinY {
-                    if binary[sy * roiWidth + stemUpX] { upDark += 1 }
+                for sx in upX1...upX2 {
+                    var colDark = 0
+                    for sy in upStart..<nhMinY {
+                        if binary[sy * roiWidth + sx] { colDark += 1 }
+                    }
+                    if colDark >= Int(sp * 0.8) {
+                        hasStem = true
+                        break
+                    }
                 }
-                if upDark > Int(sp * 1.0) { hasStem = true }
             }
             // Check stem below left
-            let stemDnX = max(0, nhMidX - Int(sp * 0.35))
-            if !hasStem && nhMaxY + Int(sp * 1.5) < roiHeight {
-                var dnDark = 0
+            let dnX1 = max(0, nhMidX - Int(sp * 0.65))
+            let dnX2 = min(roiWidth - 1, nhMidX - Int(sp * 0.15))
+            if !hasStem && nhMaxY + Int(sp * 1.2) < roiHeight {
                 let dnEnd = min(roiHeight, nhMaxY + Int(sp * 2.5))
-                for sy in nhMaxY..<dnEnd {
-                    if binary[sy * roiWidth + stemDnX] { dnDark += 1 }
+                for sx in dnX1...dnX2 {
+                    var colDark = 0
+                    for sy in nhMaxY..<dnEnd {
+                        if binary[sy * roiWidth + sx] { colDark += 1 }
+                    }
+                    if colDark >= Int(sp * 0.8) {
+                        hasStem = true
+                        break
+                    }
                 }
-                if dnDark > Int(sp * 1.0) { hasStem = true }
             }
             
-            let isHollow = (fillRatio < 0.42 && bw >= sp * 0.65)
-            let noteDuration: Double
-            if isHollow {
-                noteDuration = hasStem ? 2.0 : 4.0 // Half note vs Whole note
-            } else {
-                noteDuration = 1.0 // Quarter note
-            }
+            let centerIdx = Int(nh.centroidY) * roiWidth + Int(nh.centroidX)
+            let centerEmpty = (centerIdx >= 0 && centerIdx < noteheadMask.count) ? (!noteheadMask[centerIdx]) : false
+            let isHollow = (fillRatio < 0.45 && bw >= sp * 0.60 && centerEmpty)
+            let noteDuration: Double = isHollow ? (hasStem ? 2.0 : 4.0) : 1.0
             
-            // Accidental analysis: look in the window to the left of the notehead
+            // Accidental analysis in noteheadMask (staff lines inpainted/filtered out!)
             let accLeft = max(0, Int(nh.centroidX - sp * 1.8))
-            let accRight = max(0, Int(nh.centroidX - sp * 0.5))
+            let accRight = max(0, Int(nh.centroidX - sp * 0.45))
             let accTop = max(0, Int(nh.centroidY - sp * 0.7))
             let accBottom = min(roiHeight - 1, Int(nh.centroidY + sp * 0.7))
             
@@ -543,16 +556,16 @@ public final class NoteRecognitionEngine {
                 for ay in accTop...accBottom {
                     let rOff = ay * roiWidth
                     for ax in accLeft...accRight {
-                        if binary[rOff + ax] { accDarkCount += 1 }
+                        if noteheadMask[rOff + ax] { accDarkCount += 1 }
                     }
                 }
                 let accArea = (accRight - accLeft + 1) * (accBottom - accTop + 1)
                 let accDensity = Double(accDarkCount) / Double(max(1, accArea))
-                if accDensity > 0.18 && accDarkCount > Int(sp * 1.4) {
+                if accDensity > 0.15 && accDarkCount > Int(sp * 1.5) {
                     var topHalfLeftStroke = 0
                     let midY = (accTop + accBottom) / 2
                     for ay in accTop...midY {
-                        if binary[ay * roiWidth + accLeft] || binary[ay * roiWidth + accLeft + 1] {
+                        if noteheadMask[ay * roiWidth + accLeft] || noteheadMask[ay * roiWidth + accLeft + 1] {
                             topHalfLeftStroke += 1
                         }
                     }
