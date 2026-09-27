@@ -63,15 +63,15 @@
 		BB1000132C00000100000001 /* ScorePlayerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScorePlayerViewModel.swift; sourceTree = "<group>"; };
 		BB1000142C00000100000001 /* ScannerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScannerViewModel.swift; sourceTree = "<group>"; };
 		BB1000152C00000100000001 /* SongLibraryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SongLibraryViewModel.swift; sourceTree = "<group>"; };
-		BB1000162C00000100000001 /* ScoreCanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoreCanvasView.swift; sourceTree = "<group>"; };
-		BB1000172C00000100000001 /* VirtualPianoKeyboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualPianoKeyboardView.swift; sourceTree = "<group>"; };
-		BB1000182C00000100000001 /* WaterfallNotesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaterfallNotesView.swift; sourceTree = "<group>"; };
-		BB1000192C00000100000001 /* PracticeDockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PracticeDockView.swift; sourceTree = "<group>"; };
-		BB10001A2C00000100000001 /* PracticeSettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PracticeSettingsSheet.swift; sourceTree = "<group>"; };
-		BB10001B2C00000100000001 /* ScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScannerView.swift; sourceTree = "<group>"; };
-		BB10001C2C00000100000001 /* SongLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SongLibraryView.swift; sourceTree = "<group>"; };
+		BB1000162C00000100000001 /* ScoreCanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Score/ScoreCanvasView.swift"; sourceTree = "<group>"; };
+		BB1000172C00000100000001 /* VirtualPianoKeyboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Keyboard/VirtualPianoKeyboardView.swift"; sourceTree = "<group>"; };
+		BB1000182C00000100000001 /* WaterfallNotesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Keyboard/WaterfallNotesView.swift"; sourceTree = "<group>"; };
+		BB1000192C00000100000001 /* PracticeDockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Practice/PracticeDockView.swift"; sourceTree = "<group>"; };
+		BB10001A2C00000100000001 /* PracticeSettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Practice/PracticeSettingsSheet.swift"; sourceTree = "<group>"; };
+		BB10001B2C00000100000001 /* ScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Scanner/ScannerView.swift"; sourceTree = "<group>"; };
+		BB10001C2C00000100000001 /* SongLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Library/SongLibraryView.swift"; sourceTree = "<group>"; };
 		BB10001D2C00000100000001 /* ScorePlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScorePlayerView.swift; sourceTree = "<group>"; };
-		BB10001E2C00000100000001 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		BB10001E2C00000100000001 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Settings/SettingsView.swift"; sourceTree = "<group>"; };
 		BB10001F2C00000100000001 /* fur_elise.musicxml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = fur_elise.musicxml; sourceTree = "<group>"; };
 		BB1000202C00000100000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -167,6 +167,7 @@
 				BB10000D2C00000100000001 /* NoteRecognitionEngine.swift */,
 				BB10000E2C00000100000001 /* MusicXMLParser.swift */,
 				BB10000F2C00000100000001 /* MusicXMLExporter.swift */,
+				BB1000102C00000100000001 /* MusicScannerService.swift */,
 			);
 			path = OMR;
 			sourceTree = "<group>";
@@ -174,7 +175,6 @@
 		DD1000092C00000100000001 /* Services */ = {
 			isa = PBXGroup;
 			children = (
-				BB1000102C00000100000001 /* MusicScannerService.swift */,
 				BB1000112C00000100000001 /* RepertoireService.swift */,
 				BB1000122C00000100000001 /* ScanStorageService.swift */,
 			);
