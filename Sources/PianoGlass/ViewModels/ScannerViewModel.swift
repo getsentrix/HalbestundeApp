@@ -210,8 +210,45 @@ public final class ScannerViewModel: ObservableObject {
         }
         
         // 3. PDF import
-        #if canImport(PDFKit)
-        if fileExtension == "pdf", let pdfDoc = PDFKit.PDFDocument(data: data), let page = pdfDoc.page(at: 0) {
+        if fileExtension == "pdf" {
+            let useRemote = UserDefaults.standard.object(forKey: "useRemoteOMR") as? Bool ?? true
+            if useRemote {
+                statusMessage = "Transcribing PDF score with neural OMR..."
+                progressFraction = 0.25
+                Task { [weak self] in
+                    guard let self = self else { return }
+                    let res = await self.scannerService.processDocumentData(
+                        data,
+                        mimeType: "application/pdf",
+                        fileName: url.lastPathComponent,
+                        scoreTitle: displayTitle
+                    )
+                    await MainActor.run {
+                        switch res {
+                        case .success(let scanResult):
+                            self.finishSuccessfulImport(scanResult.recognizedScore)
+                        case .failure:
+                            // Fallback to local rendering
+                            self.processLocalPDF(data: data, title: displayTitle)
+                        }
+                    }
+                }
+                return
+            } else {
+                processLocalPDF(data: data, title: displayTitle)
+                return
+            }
+        }
+        #endif
+        
+        // 4. Fallback for unrecognized data
+        let fallback = createFallbackScore(title: displayTitle)
+        finishSuccessfulImport(fallback, notice: "File imported as playable practice score (\(url.lastPathComponent)).")
+    }
+    
+    private func processLocalPDF(data: Data, title: String) {
+        #if canImport(PDFKit) && canImport(UIKit)
+        if let pdfDoc = PDFKit.PDFDocument(data: data), let page = pdfDoc.page(at: 0) {
             statusMessage = "Rendering PDF sheet music..."
             progressFraction = 0.3
             let pageRect = page.bounds(for: .mediaBox)
@@ -224,16 +261,13 @@ public final class ScannerViewModel: ObservableObject {
                 page.draw(with: .mediaBox, to: ctx.cgContext)
             }
             if let cgImage = renderedImage.normalizedCGImage {
-                processCapturedImage(cgImage, title: displayTitle)
+                processCapturedImage(cgImage, title: title)
                 return
             }
         }
         #endif
-        #endif
-        
-        // 4. Fallback for unrecognized data
-        let fallback = createFallbackScore(title: displayTitle)
-        finishSuccessfulImport(fallback, notice: "File imported as playable practice score (\(url.lastPathComponent)).")
+        let fallback = createFallbackScore(title: title)
+        finishSuccessfulImport(fallback, notice: "PDF rendered with playable arrangement.")
     }
     
     private func finishSuccessfulImport(_ score: Score, notice: String? = nil) {

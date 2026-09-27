@@ -12,6 +12,8 @@ public struct SettingsView: View {
     @ObservedObject var audioEngine: PianoAudioEngine
     @AppStorage("hapticsEnabled") private var hapticsEnabled: Bool = true
     @AppStorage("enhanceScanContrast") private var enhanceScanContrast: Bool = true
+    @AppStorage("omrBackendURL") private var omrBackendURL: String = "http://localhost:8000"
+    @AppStorage("useRemoteOMR") private var useRemoteOMR: Bool = true
     
     public init(audioEngine: PianoAudioEngine = .shared) {
         self.audioEngine = audioEngine
@@ -52,10 +54,24 @@ public struct SettingsView: View {
                 // Scanner Section
                 Section {
                     Toggle("Enhance Scan Contrast", isOn: $enhanceScanContrast)
+                    Toggle("Use OMR Backend Server", isOn: $useRemoteOMR)
+                    if useRemoteOMR {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("OMR Backend Server")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                            TextField("http://localhost:8000", text: $omrBackendURL)
+                                .textFieldStyle(.roundedBorder)
+                                .autocorrectionDisabled()
+                                .textInputAutocapitalization(.never)
+                                .keyboardType(.URL)
+                        }
+                        .padding(.vertical, 2)
+                    }
                 } header: {
-                    Text("Scanner")
+                    Text("Scanner & Recognition")
                 } footer: {
-                    Text("Improves recognition on faintly printed sheet music.")
+                    Text("Connects to Python OMR backend (oemer + music21) for high-accuracy neural transcription. Falls back to on-device recognition when unreachable.")
                 }
                 
                 // Touch & Feedback

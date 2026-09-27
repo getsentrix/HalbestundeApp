@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PianoGlass Studio - OMR Transcription & Player</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <!-- Tone.js and @tonejs/midi -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+  <script src="https://unpkg.com/@tonejs/midi"></script>
+
+  <style>
+    :root {
+      --bg: #090a0f;
+      --card-bg: rgba(22, 24, 34, 0.7);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --accent-glow: rgba(59, 130, 246, 0.25);
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+      --success: #10b981;
+      --success-bg: rgba(16, 185, 129, 0.12);
+      --surface: #141721;
+      --radius: 16px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2.5rem 1.5rem;
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.12) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.1) 0px, transparent 50%);
+    }
+
+    .container {
+      width: 100%;
+      max-width: 820px;
+      display: flex;
+      flex-direction: column;
+      gap: 1.75rem;
+    }
+
+    /* Header */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 0.5rem;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+    }
+
+    .brand-icon {
+      width: 44px;
+      height: 44px;
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 8px 20px var(--accent-glow);
+    }
+
+    .brand-icon svg {
+      width: 24px;
+      height: 24px;
+      fill: white;
+    }
+
+    .brand-text h1 {
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-text p {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+
+    .badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      padding: 0.35rem 0.75rem;
+      border-radius: 9999px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .badge .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 8px var(--success);
+    }
+
+    /* Card container */
+    .card {
+      background: var(--card-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 1.75rem;
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4);
+    }
+
+    /* Upload Dropzone */
+    .dropzone {
+      border: 2px dashed rgba(255, 255, 255, 0.14);
+      border-radius: 14px;
+      padding: 2.75rem 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      background: rgba(255, 255, 255, 0.015);
+      position: relative;
+    }
+
+    .dropzone:hover, .dropzone.dragover {
+      border-color: var(--accent);
+      background: rgba(59, 130, 246, 0.05);
+      transform: translateY(-1px);
+    }
+
+    .dropzone-icon {
+      width: 56px;
+      height: 56px;
+      margin: 0 auto 1.25rem;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.04);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent);
+      border: 1px solid var(--card-border);
+    }
+
+    .dropzone h3 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin-bottom: 0.35rem;
+    }
+
+    .dropzone p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-bottom: 1.25rem;
+    }
+
+    .dropzone-actions {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+    }
+
+    button {
+      font-family: inherit;
+      cursor: pointer;
+      border: none;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+      font-size: 0.85rem;
+      font-weight: 600;
+      padding: 0.6rem 1.25rem;
+      border-radius: 10px;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      box-shadow: 0 4px 14px var(--accent-glow);
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-hover);
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text);
+      font-size: 0.85rem;
+      font-weight: 500;
+      padding: 0.6rem 1.15rem;
+      border-radius: 10px;
+      border: 1px solid var(--card-border);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    /* Progress block */
+    .progress-section {
+      display: none;
+      margin-top: 1.25rem;
+    }
+
+    .progress-info {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+    }
+
+    .progress-bar-container {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+      border-radius: 99px;
+      transition: width 0.3s ease;
+    }
+
+    /* Player card */
+    .player-card {
+      display: none;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .score-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 1px solid var(--card-border);
+      padding-bottom: 1.25rem;
+    }
+
+    .score-title-group h2 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      margin-bottom: 0.25rem;
+    }
+
+    .score-meta {
+      display: flex;
+      gap: 0.85rem;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .engine-tag {
+      background: var(--success-bg);
+      color: var(--success);
+      font-size: 0.72rem;
+      padding: 0.25rem 0.6rem;
+      border-radius: 6px;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    /* Transport controls */
+    .transport {
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .scrub-container {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .scrub-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 99px;
+      outline: none;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .scrub-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      box-shadow: 0 0 10px var(--accent-glow);
+      transition: transform 0.15s ease;
+    }
+
+    .scrub-slider::-webkit-slider-thumb:hover {
+      transform: scale(1.25);
+    }
+
+    .time-display {
+      display: flex;
+      justify-content: space-between;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+
+    .controls-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .main-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .play-btn {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 6px 18px var(--accent-glow);
+    }
+
+    .play-btn:hover {
+      background: var(--accent-hover);
+      transform: scale(1.05);
+    }
+
+    .play-btn svg {
+      width: 20px;
+      height: 20px;
+      fill: currentColor;
+    }
+
+    .btn-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--card-border);
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .btn-icon:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .btn-icon svg {
+      width: 16px;
+      height: 16px;
+      fill: currentColor;
+    }
+
+    /* Tempo slider control */
+    .tempo-group {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      background: rgba(255, 255, 255, 0.03);
+      padding: 0.45rem 0.85rem;
+      border-radius: 12px;
+      border: 1px solid var(--card-border);
+    }
+
+    .tempo-label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .tempo-slider {
+      -webkit-appearance: none;
+      width: 110px;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 99px;
+      outline: none;
+    }
+
+    .tempo-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--text);
+      cursor: pointer;
+    }
+
+    .tempo-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      color: var(--text);
+      min-width: 58px;
+      text-align: right;
+    }
+
+    /* Keyboard visualizer */
+    .keyboard-container {
+      background: rgba(0, 0, 0, 0.35);
+      border-radius: 12px;
+      border: 1px solid var(--card-border);
+      padding: 1rem;
+      overflow-x: auto;
+    }
+
+    .piano-keys {
+      display: flex;
+      height: 90px;
+      position: relative;
+      user-select: none;
+      justify-content: center;
+    }
+
+    .white-key {
+      width: 28px;
+      height: 100%;
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-radius: 0 0 5px 5px;
+      position: relative;
+      z-index: 1;
+      transition: background 0.08s ease;
+    }
+
+    .white-key.active {
+      background: #93c5fd !important;
+      box-shadow: 0 0 12px #3b82f6;
+    }
+
+    .black-key {
+      width: 18px;
+      height: 60%;
+      background: #1e293b;
+      position: absolute;
+      z-index: 2;
+      border-radius: 0 0 4px 4px;
+      transition: background 0.08s ease;
+    }
+
+    .black-key.active {
+      background: #60a5fa !important;
+      box-shadow: 0 0 12px #60a5fa;
+    }
+
+    /* Exports */
+    .exports-row {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      border-top: 1px solid var(--card-border);
+      padding-top: 1.25rem;
+    }
+
+    footer {
+      text-align: center;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      padding: 1.5rem 0;
+    }
+
+    footer a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header>
+      <div class="brand">
+        <div class="brand-icon">
+          <svg viewBox="0 0 24 24">
+            <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1>PianoGlass OMR</h1>
+          <p>End-to-End Sheet Music Transcription & MIDI Playback</p>
+        </div>
+      </div>
+      <div class="badge" id="backendBadge">
+        <span class="dot"></span>
+        <span id="backendStatus">Connecting...</span>
+      </div>
+    </header>
+
+    <!-- Upload Card -->
+    <div class="card" id="uploadCard">
+      <div class="dropzone" id="dropzone">
+        <div class="dropzone-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+        </div>
+        <h3>Upload Sheet Music</h3>
+        <p>Drop a PDF document or sheet music image (PNG, JPG, TIFF) to transcribe</p>
+        
+        <div class="dropzone-actions">
+          <button class="btn-primary" id="chooseFileBtn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 5v14M5 12h14"></path>
+            </svg>
+            Select Document
+          </button>
+          <button class="btn-secondary" id="sampleBtn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M8 5v14l11-7z"/>
+            </svg>
+            Load Sample (Bach)
+          </button>
+        </div>
+        <input type="file" id="fileInput" accept=".pdf,image/png,image/jpeg,image/tiff,image/webp" />
+      </div>
+
+      <!-- Transcription Progress -->
+      <div class="progress-section" id="progressSection">
+        <div class="progress-info">
+          <span id="progressMessage">Analyzing staves & musical symbols...</span>
+          <span id="progressPercent">0%</span>
+        </div>
+        <div class="progress-bar-container">
+          <div class="progress-bar-fill" id="progressBarFill"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Player Card -->
+    <div class="card player-card" id="playerCard">
+      <div class="score-header">
+        <div class="score-title-group">
+          <h2 id="scoreTitleDisplay">Scanned Score</h2>
+          <div class="score-meta">
+            <span id="metaDuration">0:00</span>
+            <span>•</span>
+            <span id="metaMeasures">0 measures</span>
+            <span>•</span>
+            <span id="metaNotes">0 notes</span>
+          </div>
+        </div>
+        <span class="engine-tag" id="engineTag">oemer</span>
+      </div>
+
+      <!-- Transport Controls -->
+      <div class="transport">
+        <!-- Scrub bar -->
+        <div class="scrub-container">
+          <input type="range" class="scrub-slider" id="scrubSlider" min="0" max="100" value="0" step="0.1" />
+          <div class="time-display">
+            <span id="currentTimeDisplay">0:00</span>
+            <span id="totalTimeDisplay">0:00</span>
+          </div>
+        </div>
+
+        <!-- Buttons and Tempo -->
+        <div class="controls-row">
+          <div class="main-controls">
+            <button class="btn-icon" id="rewindBtn" title="Rewind to start">
+              <svg viewBox="0 0 24 24">
+                <path d="M11 18V6l-8.5 6 8.5 6zm.5-6l8.5 6V6l-8.5 6z"/>
+              </svg>
+            </button>
+            <button class="play-btn" id="playBtn" title="Play / Pause (Space)">
+              <svg id="playIcon" viewBox="0 0 24 24">
+                <path d="M8 5v14l11-7z"/>
+              </svg>
+            </button>
+            <button class="btn-icon" id="stopBtn" title="Stop">
+              <svg viewBox="0 0 24 24">
+                <path d="M6 6h12v12H6z"/>
+              </svg>
+            </button>
+          </div>
+
+          <!-- Tempo Slider -->
+          <div class="tempo-group">
+            <span class="tempo-label">Tempo</span>
+            <input type="range" class="tempo-slider" id="tempoSlider" min="40" max="240" value="110" />
+            <span class="tempo-value" id="tempoValue">110 BPM</span>
+          </div>
+        </div>
+
+        <!-- Piano Visualizer -->
+        <div class="keyboard-container">
+          <div class="piano-keys" id="pianoKeys"></div>
+        </div>
+
+        <!-- Export Buttons -->
+        <div class="exports-row">
+          <a class="btn-secondary" id="downloadMidiBtn" href="#" download>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            Download MIDI (.mid)
+          </a>
+          <a class="btn-secondary" id="downloadXmlBtn" href="#" download>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+            </svg>
+            Download MusicXML (.musicxml)
+          </a>
+          <button class="btn-secondary" id="newScanBtn">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M23 4v6h-6M1 20v-6h6"></path>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+            Transcribe Another
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      PianoGlass OMR &copy; 2026 • Powered by <a href="https://github.com/BreezeWhite/oemer" target="_blank">oemer</a> & <a href="https://web.mit.edu/music21/" target="_blank">music21</a>
+    </footer>
+  </div>
+
+  <script>
+    // Audio engine state
+    let synth = null;
+    let currentMidi = null;
+    let scheduledEvents = [];
+    let isPlaying = false;
+    let playbackStartTime = 0;
+    let pauseOffset = 0;
+    let currentBpm = 110;
+    let originalBpm = 110;
+    let songDuration = 0;
+    let animFrame = null;
+
+    // Elements
+    const backendStatus = document.getElementById('backendStatus');
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+    const chooseFileBtn = document.getElementById('chooseFileBtn');
+    const sampleBtn = document.getElementById('sampleBtn');
+    const progressSection = document.getElementById('progressSection');
+    const progressMessage = document.getElementById('progressMessage');
+    const progressPercent = document.getElementById('progressPercent');
+    const progressBarFill = document.getElementById('progressBarFill');
+    const playerCard = document.getElementById('playerCard');
+    const uploadCard = document.getElementById('uploadCard');
+    const playBtn = document.getElementById('playBtn');
+    const playIcon = document.getElementById('playIcon');
+    const rewindBtn = document.getElementById('rewindBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const scrubSlider = document.getElementById('scrubSlider');
+    const currentTimeDisplay = document.getElementById('currentTimeDisplay');
+    const totalTimeDisplay = document.getElementById('totalTimeDisplay');
+    const tempoSlider = document.getElementById('tempoSlider');
+    const tempoValue = document.getElementById('tempoValue');
+    const scoreTitleDisplay = document.getElementById('scoreTitleDisplay');
+    const metaDuration = document.getElementById('metaDuration');
+    const metaMeasures = document.getElementById('metaMeasures');
+    const metaNotes = document.getElementById('metaNotes');
+    const engineTag = document.getElementById('engineTag');
+    const downloadMidiBtn = document.getElementById('downloadMidiBtn');
+    const downloadXmlBtn = document.getElementById('downloadXmlBtn');
+    const newScanBtn = document.getElementById('newScanBtn');
+    const pianoKeysContainer = document.getElementById('pianoKeys');
+
+    // Initialize Tone.js PolySynth
+    function initSynth() {
+      if (!synth) {
+        synth = new Tone.PolySynth(Tone.Synth, {
+          oscillator: { type: "triangle8" },
+          envelope: {
+            attack: 0.005,
+            decay: 1.2,
+            sustain: 0.15,
+            release: 1.4
+          }
+        }).toDestination();
+        synth.volume.value = -3;
+      }
+    }
+
+    // Health check on load
+    async function checkHealth() {
+      try {
+        const res = await fetch('/api/health');
+        const data = await res.json();
+        if (data.status === 'healthy') {
+          backendStatus.textContent = data.oemer_available ? 'OMR: Deep Learning (oemer)' : 'OMR: Fast Fallback Active';
+        }
+      } catch (e) {
+        backendStatus.textContent = 'Server Offline';
+      }
+    }
+    checkHealth();
+
+    // Render interactive piano keyboard visualizer (C3 to B5, 3 octaves)
+    function buildKeyboard() {
+      pianoKeysContainer.innerHTML = '';
+      const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+      const octaves = [3, 4, 5];
+      let whiteIndex = 0;
+
+      octaves.forEach(oct => {
+        notes.forEach(name => {
+          const fullName = `${name}${oct}`;
+          const isBlack = name.includes('#');
+
+          if (!isBlack) {
+            const wKey = document.createElement('div');
+            wKey.className = 'white-key';
+            wKey.dataset.note = fullName;
+            pianoKeysContainer.appendChild(wKey);
+            whiteIndex++;
+          }
+        });
+      });
+
+      // Position black keys over white keys
+      whiteIndex = 0;
+      octaves.forEach(oct => {
+        notes.forEach(name => {
+          const fullName = `${name}${oct}`;
+          const isBlack = name.includes('#');
+          if (isBlack) {
+            const bKey = document.createElement('div');
+            bKey.className = 'black-key';
+            bKey.dataset.note = fullName;
+            // Left offset depends on white key index
+            bKey.style.left = `${(whiteIndex * 28) - 9}px`;
+            pianoKeysContainer.appendChild(bKey);
+          } else {
+            whiteIndex++;
+          }
+        });
+      });
+    }
+    buildKeyboard();
+
+    function highlightKey(noteName, active) {
+      const key = pianoKeysContainer.querySelector(`[data-note="${noteName}"]`);
+      if (key) {
+        if (active) {
+          key.classList.add('active');
+        } else {
+          key.classList.remove('active');
+        }
+      }
+    }
+
+    // Format seconds to mm:ss
+    function formatTime(sec) {
+      sec = Math.max(0, sec || 0);
+      const m = Math.floor(sec / 60);
+      const s = Math.floor(sec % 60);
+      return `${m}:${s < 10 ? '0' : ''}${s}`;
+    }
+
+    // Load score payload and prepare MIDI playback
+    async function loadScoreData(data) {
+      scoreTitleDisplay.textContent = data.title;
+      metaDuration.textContent = formatTime(data.duration);
+      metaMeasures.textContent = `${data.measures_count} measures`;
+      metaNotes.textContent = `${data.notes_count} notes`;
+      engineTag.textContent = data.engine;
+      originalBpm = data.bpm || 110;
+      currentBpm = originalBpm;
+      tempoSlider.value = originalBpm;
+      tempoValue.textContent = `${Math.round(originalBpm)} BPM`;
+      totalTimeDisplay.textContent = formatTime(data.duration);
+      downloadMidiBtn.href = data.midi_url;
+      downloadXmlBtn.href = data.musicxml_url;
+
+      // Decode Base64 MIDI (sanitize whitespace)
+      const cleanB64 = (data.midi_base64 || '').replace(/\s+/g, '');
+      const binaryString = atob(cleanB64);
+      const len = binaryString.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      currentMidi = new Midi(bytes.buffer);
+      songDuration = currentMidi.duration || data.duration || 1;
+      pauseOffset = 0;
+      scrubSlider.value = 0;
+      currentTimeDisplay.textContent = '0:00';
+
+      playerCard.style.display = 'flex';
+      progressSection.style.display = 'none';
+      playerCard.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    // Playback control
+    async function togglePlay() {
+      await Tone.start();
+      initSynth();
+
+      if (isPlaying) {
+        pausePlayback();
+      } else {
+        startPlayback(pauseOffset);
+      }
+    }
+
+    function startPlayback(offsetSeconds) {
+      if (!currentMidi) return;
+      initSynth();
+
+      clearScheduledNotes();
+      isPlaying = true;
+      const tempoScale = originalBpm / currentBpm;
+      playbackStartTime = Tone.now() - (offsetSeconds * tempoScale);
+      updatePlayButtonUI(true);
+
+      // Schedule all notes from offset (offsetSeconds is in score time)
+      currentMidi.tracks.forEach(track => {
+        track.notes.forEach(note => {
+          if (note.time >= offsetSeconds) {
+            const realDelay = (note.time - offsetSeconds) * tempoScale;
+            const realDuration = Math.max(0.08, note.duration * tempoScale);
+
+            const eventId = setTimeout(() => {
+              if (isPlaying) {
+                synth.triggerAttackRelease(note.name, realDuration, undefined, note.velocity);
+                highlightKey(note.name, true);
+                const offId = setTimeout(() => highlightKey(note.name, false), realDuration * 1000);
+                scheduledEvents.push(offId);
+              }
+            }, realDelay * 1000);
+            scheduledEvents.push(eventId);
+          }
+        });
+      });
+
+      // Start ticker animation
+      cancelAnimationFrame(animFrame);
+      function tick() {
+        if (!isPlaying) return;
+        const realElapsed = Tone.now() - playbackStartTime;
+        const currentElapsed = realElapsed / tempoScale;
+        pauseOffset = currentElapsed;
+
+        if (currentElapsed >= songDuration) {
+          stopPlayback();
+          return;
+        }
+
+        currentTimeDisplay.textContent = formatTime(currentElapsed);
+        scrubSlider.value = (currentElapsed / songDuration) * 100;
+        animFrame = requestAnimationFrame(tick);
+      }
+      animFrame = requestAnimationFrame(tick);
+    }
+
+    function pausePlayback() {
+      isPlaying = false;
+      clearScheduledNotes();
+      cancelAnimationFrame(animFrame);
+      updatePlayButtonUI(false);
+    }
+
+    function stopPlayback() {
+      isPlaying = false;
+      pauseOffset = 0;
+      clearScheduledNotes();
+      cancelAnimationFrame(animFrame);
+      scrubSlider.value = 0;
+      currentTimeDisplay.textContent = '0:00';
+      updatePlayButtonUI(false);
+    }
+
+    function clearScheduledNotes() {
+      scheduledEvents.forEach(id => clearTimeout(id));
+      scheduledEvents = [];
+      document.querySelectorAll('.piano-keys .active').forEach(k => k.classList.remove('active'));
+    }
+
+    function updatePlayButtonUI(playing) {
+      if (playing) {
+        playIcon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
+      } else {
+        playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
+      }
+    }
+
+    // Scrub slider
+    scrubSlider.addEventListener('input', (e) => {
+      const pct = parseFloat(e.target.value) / 100;
+      const targetTime = pct * songDuration;
+      pauseOffset = targetTime;
+      currentTimeDisplay.textContent = formatTime(targetTime);
+      if (isPlaying) {
+        startPlayback(targetTime);
+      }
+    });
+
+    // Tempo slider
+    tempoSlider.addEventListener('input', (e) => {
+      currentBpm = parseInt(e.target.value, 10);
+      tempoValue.textContent = `${currentBpm} BPM`;
+      if (isPlaying) {
+        startPlayback(pauseOffset);
+      }
+    });
+
+    // Button actions
+    playBtn.addEventListener('click', togglePlay);
+    rewindBtn.addEventListener('click', () => {
+      stopPlayback();
+      startPlayback(0);
+    });
+    stopBtn.addEventListener('click', stopPlayback);
+
+    // Keyboard shortcut (Space = Play/Pause)
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' && e.target.tagName !== 'INPUT') {
+        e.preventDefault();
+        togglePlay();
+      }
+    });
+
+    // Upload & Drag-and-drop
+    chooseFileBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      fileInput.click();
+    });
+
+    dropzone.addEventListener('click', () => fileInput.click());
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+      dropzone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        dropzone.classList.add('dragover');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      dropzone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        dropzone.classList.remove('dragover');
+      });
+    });
+
+    dropzone.addEventListener('drop', (e) => {
+      const files = e.dataTransfer.files;
+      if (files.length > 0) {
+        uploadFile(files[0]);
+      }
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length > 0) {
+        uploadFile(e.target.files[0]);
+      }
+    });
+
+    // Sample button
+    sampleBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      showProgress("Loading Bach Prelude in C...", 40);
+      try {
+        const res = await fetch('/api/sample');
+        if (!res.ok) throw new Error("Failed to load sample");
+        const data = await res.json();
+        showProgress("Score parsed! Ready.", 100);
+        setTimeout(() => loadScoreData(data), 300);
+      } catch (err) {
+        alert("Error loading sample: " + err.message);
+        progressSection.style.display = 'none';
+      }
+    });
+
+    newScanBtn.addEventListener('click', () => {
+      stopPlayback();
+      uploadCard.scrollIntoView({ behavior: 'smooth' });
+    });
+
+    function showProgress(msg, pct) {
+      progressSection.style.display = 'block';
+      progressMessage.textContent = msg;
+      progressPercent.textContent = `${pct}%`;
+      progressBarFill.style.width = `${pct}%`;
+    }
+
+    async function uploadFile(file) {
+      stopPlayback();
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('title', file.name.replace(/\.[^/.]+$/, ""));
+
+      showProgress("Rendering sheet at 300 DPI...", 25);
+
+      try {
+        setTimeout(() => showProgress("Running neural symbol segmentation (OMR)...", 55), 500);
+        setTimeout(() => showProgress("Synthesizing MusicXML & MIDI tracks...", 85), 1200);
+
+        const res = await fetch('/api/transcribe', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.detail || "Transcription failed");
+        }
+
+        const data = await res.json();
+        showProgress("Transcription complete!", 100);
+        setTimeout(() => loadScoreData(data), 350);
+      } catch (err) {
+        alert("Upload error: " + err.message);
+        progressSection.style.display = 'none';
+      }
+    }
+  </script>
+</body>
+</html>
