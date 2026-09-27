@@ -398,7 +398,7 @@ public final class ScannerViewModel: ObservableObject {
             }
             
             guard let demoCGImage = context.makeImage() else { return }
-            await self.processCapturedImage(demoCGImage, title: title)
+            self.processCapturedImage(demoCGImage, title: title)
         }
     }
     

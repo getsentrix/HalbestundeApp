@@ -341,5 +341,6 @@ public final class VisionStaffDetector {
         for i in 1...measureCount {
             barlines.append(barlines[0] + step * CGFloat(i))
         }
+        return barlines
     }
 }
