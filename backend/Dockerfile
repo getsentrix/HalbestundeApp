@@ -8,9 +8,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PORT=8000 \
     HOST=0.0.0.0
 
-# Install system dependencies: poppler-utils for pdf2image, libgl/opencv libraries for oemer
+# Install system dependencies: poppler-utils for pdf2image, openjdk for Audiveris OMR, libgl/opencv for oemer
 RUN apt-get update && apt-get install -y --no-install-recommends \
     poppler-utils \
+    openjdk-17-jre-headless \
     ffmpeg \
     libsm6 \
     libxext6 \

@@ -22,7 +22,9 @@ from omr_engine import (
     transcribe_image,
     transcribe_document,
     build_midi_and_metadata,
+    AUDIVERIS_AVAILABLE,
     OEMER_AVAILABLE,
+    CLOUD_AI_AVAILABLE,
     POPPLER_AVAILABLE,
 )
 import music21
@@ -56,7 +58,9 @@ def health_check():
     return {
         "status": "healthy",
         "service": "PianoGlass OMR Backend",
+        "audiveris_available": AUDIVERIS_AVAILABLE,
         "oemer_available": OEMER_AVAILABLE,
+        "cloud_ai_available": CLOUD_AI_AVAILABLE,
         "poppler_available": POPPLER_AVAILABLE,
         "music21_version": music21.__version__,
         "cached_scores_count": len(SCORE_CACHE),

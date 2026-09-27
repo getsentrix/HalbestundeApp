@@ -266,3 +266,40 @@ def test_musicxml_schema_validity():
     assert measure is not None
     assert measure.find("note") is not None
 
+
+def test_health_check_engines():
+    """Verify health check reports all engine tiers."""
+    res = client.get("/api/health")
+    assert res.status_code == 200
+    data = res.json()
+    assert "audiveris_available" in data
+    assert "cloud_ai_available" in data
+    assert "oemer_available" in data
+    assert "poppler_available" in data
+
+
+def test_advanced_vision_omr_features():
+    """Verify AdvancedVisionOMR recognizes both solid and hollow noteheads and measures."""
+    # Create image with staves, barlines, solid notehead and hollow notehead
+    img = Image.new("RGB", (800, 600), color="white")
+    draw = ImageDraw.Draw(img)
+    # Staves
+    for y in [150, 170, 190, 210, 230]:
+        draw.line([(50, y), (750, y)], fill="black", width=2)
+    # Barlines at x=50, x=400, x=750
+    for bx in [50, 400, 750]:
+        draw.line([(bx, 150), (bx, 230)], fill="black", width=2)
+    # Measure 1: Solid notehead (quarter note) at x=200, y=190 (line 3 = B4)
+    draw.ellipse([(193, 185), (207, 195)], fill="black")
+    draw.line([(207, 190), (207, 155)], fill="black", width=2)
+    # Measure 2: Hollow notehead (half note) at x=550, y=210 (line 2 = G4)
+    draw.ellipse([(542, 205), (558, 215)], outline="black", width=2)
+    draw.line([(558, 210), (558, 175)], fill="black", width=2)
+
+    xml_str = omr_engine.AdvancedVisionOMR.process_image(img, title="Features Test")
+    assert "<score-partwise" in xml_str
+    meta = omr_engine.build_midi_and_metadata(xml_str, title="Features Test")
+    assert meta["notes_count"] >= 2
+    assert meta["measures_count"] >= 2
+    assert meta["duration"] > 0
+

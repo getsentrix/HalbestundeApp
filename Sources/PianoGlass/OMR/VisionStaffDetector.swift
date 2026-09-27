@@ -248,15 +248,16 @@ public final class VisionStaffDetector {
         // Second pass: cluster adjacent peaks (caused by thick staff lines) into single peaks
         var peaks = [CGFloat]()
         var i = 0
+        let maxClusterGap = max(4.0, CGFloat(height) / 280.0)
         while i < rawPeaks.count {
             var cluster = [rawPeaks[i]]
-            while i + 1 < rawPeaks.count && rawPeaks[i + 1] - rawPeaks[i] <= 4.0 {
+            while i + 1 < rawPeaks.count && rawPeaks[i + 1] - rawPeaks[i] <= maxClusterGap {
                 i += 1
                 cluster.append(rawPeaks[i])
             }
             let best = cluster.max(by: { profile[Int($0)] < profile[Int($1)] }) ?? cluster[0]
             
-            if let lastPeak = peaks.last, (best - lastPeak) < 6.0 {
+            if let lastPeak = peaks.last, (best - lastPeak) < max(6.0, maxClusterGap) {
                 if profile[Int(best)] > profile[Int(peaks.last!)] {
                     peaks[peaks.count - 1] = best
                 }
@@ -284,10 +285,11 @@ public final class VisionStaffDetector {
     
     private func detectBarlines(in cgImage: CGImage, topY: CGFloat, bottomY: CGFloat, width: Int) -> [CGFloat] {
         // Detect actual barlines by finding vertical columns that are dark throughout
-        // the staff height (a barline is a vertical stroke spanning all 10 staff lines).
+        // the staff height. For grand staves, barlines often pass through the staves
+        // without crossing the inter-staff gap.
         let staffHeight = bottomY - topY
         guard staffHeight > 4 else {
-            return [CGFloat(width) * 0.08, CGFloat(width) * 0.97]
+            return equalBarlines(width: width)
         }
         
         let height = cgImage.height
@@ -304,7 +306,6 @@ public final class VisionStaffDetector {
             space: CGColorSpaceCreateDeviceRGB(),
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ) else {
-            // Fallback: divide evenly
             return equalBarlines(width: width)
         }
         context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
@@ -314,10 +315,11 @@ public final class VisionStaffDetector {
         let staffRows = botRow - topRow
         guard staffRows > 0 else { return equalBarlines(width: width) }
         
-        // Vertical density profile: fraction of dark pixels in each column within staff band
-        let darkThreshold: Float = 140.0
-        // A barline must be dark in at least 70% of the staff height
-        let barlineMinFraction: Float = 0.70
+        // Adaptive ink threshold
+        let darkThreshold: Float = 145.0
+        // A barline must be dark in at least 38% of the full grand staff height,
+        // or 55% of single staff height
+        let barlineMinFraction: Float = (staffHeight > 100.0) ? 0.36 : 0.52
         
         var columnDarkFraction = [Float](repeating: 0, count: width)
         for x in 0..<width {
@@ -335,7 +337,7 @@ public final class VisionStaffDetector {
         
         // Find columns that qualify as barline candidates
         var candidates = [CGFloat]()
-        let minBarlineGap = CGFloat(width) * 0.05  // At least 5% of width between barlines
+        let minBarlineGap = CGFloat(width) * 0.04  // At least 4% of width between barlines
         
         var x = 0
         while x < width {

@@ -374,66 +374,24 @@ public final class NoteRecognitionEngine {
             binary[i] = (grayPixels[i] < binThreshold)
         }
         
-        // Staff line inpainting: remove isolated horizontal staff line pixels
-        // so noteheads and vertical stems remain as isolated glyphs
+        // Staff line inpainting: remove isolated horizontal staff line pixels via
+        // vertical run-length filtering. Preserves notehead bodies on staff lines!
         var noteheadMask = binary
-        let staffLineThickness = max(1, Int(round(sp * 0.15)))
-        let checkDist = max(2, Int(round(sp * 0.35)))
-        
-        for k in 0..<5 {
-            let lineY = Int(round(lines[k] - CGFloat(topBound)))
-            for dy in -staffLineThickness...staffLineThickness {
-                let y = lineY + dy
-                guard y >= checkDist && y < roiHeight - checkDist else { continue }
+        let lineThick = max(2, Int(round(sp * 0.18)))
+        if roiHeight > lineThick * 2 {
+            for y in lineThick..<(roiHeight - lineThick) {
+                let rowOff = y * roiWidth
+                let aboveOff = (y - lineThick) * roiWidth
+                let belowOff = (y + lineThick) * roiWidth
                 for x in 0..<roiWidth {
-                    if binary[y * roiWidth + x] {
-                        let aboveDark = binary[(y - checkDist) * roiWidth + x]
-                        let belowDark = binary[(y + checkDist) * roiWidth + x]
-                        if !aboveDark && !belowDark {
-                            noteheadMask[y * roiWidth + x] = false
-                        }
+                    if binary[rowOff + x] && !binary[aboveOff + x] && !binary[belowOff + x] {
+                        noteheadMask[rowOff + x] = false
                     }
                 }
             }
         }
         
-        // Morphological horizontal opening: erases thin vertical stems (width < 0.35 * sp)
-        // leaving wide notehead bodies (width >= 0.7 * sp) intact
-        let kernelHalfWidth = max(2, Int(round(sp * 0.28)))
-        var eroded = [Bool](repeating: false, count: roiWidth * roiHeight)
-        for y in 0..<roiHeight {
-            let rowOffset = y * roiWidth
-            for x in kernelHalfWidth..<(roiWidth - kernelHalfWidth) {
-                if noteheadMask[rowOffset + x] {
-                    var allDark = true
-                    for dx in -kernelHalfWidth...kernelHalfWidth {
-                        if !noteheadMask[rowOffset + x + dx] {
-                            allDark = false
-                            break
-                        }
-                    }
-                    eroded[rowOffset + x] = allDark
-                }
-            }
-        }
-        
-        var opened = [Bool](repeating: false, count: roiWidth * roiHeight)
-        for y in 0..<roiHeight {
-            let rowOffset = y * roiWidth
-            for x in 0..<roiWidth {
-                if eroded[rowOffset + x] {
-                    let xMin = max(0, x - kernelHalfWidth)
-                    let xMax = min(roiWidth - 1, x + kernelHalfWidth)
-                    for dx in xMin...xMax {
-                        if noteheadMask[rowOffset + dx] {
-                            opened[rowOffset + dx] = true
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Connected Component Analysis on surviving notehead blobs
+        // Connected Component Analysis on surviving notehead candidates
         var visited = [Bool](repeating: false, count: roiWidth * roiHeight)
         struct NoteheadBlob {
             var minX: Int
@@ -451,7 +409,7 @@ public final class NoteRecognitionEngine {
         for y in 0..<roiHeight {
             let rowOffset = y * roiWidth
             for x in 0..<roiWidth {
-                if opened[rowOffset + x] && !visited[rowOffset + x] {
+                if noteheadMask[rowOffset + x] && !visited[rowOffset + x] {
                     var queue: [(Int, Int)] = [(x, y)]
                     visited[rowOffset + x] = true
                     var qHead = 0
@@ -481,7 +439,7 @@ public final class NoteRecognitionEngine {
                                 let nx = cx + dx
                                 guard nx >= 0 && nx < roiWidth else { continue }
                                 let nIdx = nRow + nx
-                                if opened[nIdx] && !visited[nIdx] {
+                                if noteheadMask[nIdx] && !visited[nIdx] {
                                     visited[nIdx] = true
                                     queue.append((nx, ny))
                                 }
@@ -499,25 +457,25 @@ public final class NoteRecognitionEngine {
             }
         }
         
-        // Filter blobs by notehead geometric properties
-        let minW = sp * 0.55
-        let maxW = sp * 2.2
-        let minH = sp * 0.45
-        let maxH = sp * 1.8
-        let minArea = Int(round(sp * sp * 0.20))
+        // Filter blobs by notehead geometric properties (both solid and hollow noteheads)
+        let minW = sp * 0.45
+        let maxW = sp * 2.4
+        let minH = sp * 0.40
+        let maxH = sp * 2.2
+        let minArea = Int(round(sp * sp * 0.14))
         
         var noteheads = candidateBlobs.filter { b in
             let bw = CGFloat(b.maxX - b.minX + 1)
             let bh = CGFloat(b.maxY - b.minY + 1)
             let aspect = bw / max(1.0, bh)
-            return bw >= minW && bw <= maxW && bh >= minH && bh <= maxH && b.pixelCount >= minArea && aspect >= 0.55 && aspect <= 2.2
+            return bw >= minW && bw <= maxW && bh >= minH && bh <= maxH && b.pixelCount >= minArea && aspect >= 0.45 && aspect <= 2.4
         }
         
         noteheads.sort { $0.centroidX < $1.centroidX }
         
         var noteEvents = [NoteEvent]()
         var lastNoteX: CGFloat = -999.0
-        let minNoteGap = sp * 0.6
+        let minNoteGap = sp * 0.55
         
         for nh in noteheads {
             let globalX = CGFloat(leftBound) + CGFloat(nh.centroidX)
@@ -533,6 +491,46 @@ public final class NoteRecognitionEngine {
             // globalY is in image coordinates. Distance upward is (bottomLineY - globalY) / sp
             let staffPos = Double((bottomLineY - globalY) / sp)
             var pitch = NoteRecognitionEngine.pitchForStaffPosition(position: staffPos, clef: clef)
+            
+            // Hollow vs Solid Notehead duration analysis:
+            let bw = CGFloat(nh.maxX - nh.minX + 1)
+            let bh = CGFloat(nh.maxY - nh.minY + 1)
+            let fillRatio = Double(nh.pixelCount) / Double(max(1.0, bw * bh))
+            
+            // Stem check in original binary: check above or below notehead
+            let nhMidX = Int(nh.centroidX)
+            let nhMinY = nh.minY
+            let nhMaxY = nh.maxY
+            var hasStem = false
+            
+            // Check stem above right
+            let stemUpX = min(roiWidth - 1, nhMidX + Int(sp * 0.35))
+            if nhMinY > Int(sp * 1.5) {
+                var upDark = 0
+                let upStart = max(0, nhMinY - Int(sp * 2.5))
+                for sy in upStart..<nhMinY {
+                    if binary[sy * roiWidth + stemUpX] { upDark += 1 }
+                }
+                if upDark > Int(sp * 1.0) { hasStem = true }
+            }
+            // Check stem below left
+            let stemDnX = max(0, nhMidX - Int(sp * 0.35))
+            if !hasStem && nhMaxY + Int(sp * 1.5) < roiHeight {
+                var dnDark = 0
+                let dnEnd = min(roiHeight, nhMaxY + Int(sp * 2.5))
+                for sy in nhMaxY..<dnEnd {
+                    if binary[sy * roiWidth + stemDnX] { dnDark += 1 }
+                }
+                if dnDark > Int(sp * 1.0) { hasStem = true }
+            }
+            
+            let isHollow = (fillRatio < 0.42 && bw >= sp * 0.65)
+            let noteDuration: Double
+            if isHollow {
+                noteDuration = hasStem ? 2.0 : 4.0 // Half note vs Whole note
+            } else {
+                noteDuration = 1.0 // Quarter note
+            }
             
             // Accidental analysis: look in the window to the left of the notehead
             let accLeft = max(0, Int(nh.centroidX - sp * 1.8))
@@ -579,7 +577,7 @@ public final class NoteRecognitionEngine {
             noteEvents.append(NoteEvent(
                 pitch: pitch,
                 startBeat: startBeat,
-                durationBeats: 1.0,
+                durationBeats: noteDuration,
                 velocity: hand == .right ? 0.85 : 0.72,
                 hand: hand,
                 measureIndex: measureIndex,

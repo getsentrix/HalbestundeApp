@@ -1,14 +1,27 @@
+# Core FastAPI & async web service dependencies
 fastapi>=0.100.0
 uvicorn[standard]>=0.23.0
 python-multipart>=0.0.6
 pydantic>=2.0.0
+httpx>=0.24.0
+
+# Document & image processing
 pillow>=10.0.0
 pdf2image>=1.16.0
-music21>=9.0.0
 pypdf>=4.0.0
-httpx>=0.24.0
+numpy>=1.24.0
+
+# Symbolic music, MusicXML, and MIDI synthesis
+music21>=9.0.0
+
+# Testing
 pytest>=7.0.0
-# Optional / production OMR deep learning dependencies
+
+# Production OMR Deep Learning (oemer + ONNX runtime + OpenCV)
 oemer>=0.1.8; platform_system != "Windows" or platform_machine != "ARM64"
 onnxruntime>=1.16.0; platform_system != "Windows" or platform_machine != "ARM64"
 opencv-python-headless>=4.8.0; platform_system != "Windows" or platform_machine != "ARM64"
+
+# Optional Cloud Multimodal AI OMR fallback (Gemini / OpenAI)
+google-genai>=1.0.0; python_version >= "3.10"
+openai>=1.0.0; python_version >= "3.10"

@@ -1,22 +1,8 @@
 # PianoGlass OMR Backend
 
-High-accuracy Optical Music Recognition (OMR) and MIDI synthesis service for **PianoGlass**.
+High-accuracy Optical Music Recognition (OMR) and MIDI synthesis microservice for **PianoGlass**.
 
-Replaces naive heuristic edge detection with an end-to-end deep learning and symbolic music pipeline:
-
-```
-[PDF / Image Upload]
-         ↓
-    pdf2image (300 DPI high-resolution rendering)
-         ↓
-      oemer (Neural symbol segmentation → MusicXML)
-         ↓
-      music21 (MusicXML parsing & polyphonic structure)
-         ↓
-  Standard MIDI (.mid) + MusicXML (.musicxml) + Base64
-         ↓
-[Web Tone.js Player / iOS ScorePlayerView]
-```
+Converts sheet music scans (PDF or high-definition photos) into standard MusicXML 3.1 and Standard MIDI (.mid) files with real-time polyphonic playback and iOS synchronization.
 
 ---
 
@@ -24,60 +10,68 @@ Replaces naive heuristic edge detection with an end-to-end deep learning and sym
 
 ### 1. Local Setup
 
+Install Python requirements and start the FastAPI server:
+
 ```bash
-# From repository root
+# Option A: From repository root (recommended)
+pip install -r backend/requirements.txt
+uvicorn backend.server:app --host 0.0.0.0 --port 8000 --reload
+
+# Option B: From the backend directory
 cd backend
-
-# Install Python requirements
 pip install -r requirements.txt
-
-# Start the FastAPI server
 uvicorn server:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 Open **`http://localhost:8000`** in your browser to launch the Web Tone.js Player.
+Interactive API documentation is at **`http://localhost:8000/docs`**.
 
 ---
 
 ### 2. Docker Setup (Recommended for Full Production OMR)
 
-The Docker container includes `poppler-utils` and pre-configured deep learning libraries for `oemer`:
+The production Docker container includes `poppler-utils`, `openjdk-17-jre-headless` (for Audiveris), and pre-configured deep learning libraries for `oemer`:
 
 ```bash
-cd backend
-docker build -t pianoglass-omr .
+# Build Docker image
+docker build -t pianoglass-omr backend/
+
+# Run container on port 8000
 docker run -d -p 8000:8000 --name pianoglass-omr-server pianoglass-omr
-```
 
-Health check:
-```bash
+# Verify health status
 curl http://localhost:8000/api/health
 ```
 
 ---
 
-## 🎹 Pipeline Components
+## 📦 Dependencies & Architecture
 
-1. **Document Ingestion (`omr_engine.convert_document_to_images`)**:
-   - Accepts multi-page PDFs or images (PNG, JPG, TIFF, WebP).
-   - Renders PDF pages to crisp **300 DPI** PNGs with `pdf2image`.
-   - Includes automatic `pypdf` fallback for environments where system poppler is not yet installed.
+### Core Stack
+- **Web API**: `fastapi>=0.100.0`, `uvicorn[standard]>=0.23.0`, `python-multipart>=0.0.6`, `pydantic>=2.0.0`, `httpx>=0.24.0`
+- **Document & Image Processing**: `pillow>=10.0.0`, `pdf2image>=1.16.0`, `poppler-utils`, `pypdf>=4.0.0`, `numpy>=1.24.0`
+- **Symbolic Music & MIDI**: `music21>=9.0.0`
+- **Testing**: `pytest>=7.0.0`
 
-2. **Neural OMR (`omr_engine.transcribe_document` / `transcribe_image`)**:
-   - Invokes `oemer` ([BreezeWhite/oemer](https://github.com/BreezeWhite/oemer)) deep learning models (ONNX runtime) for stave, clef, notehead, and rhythm segmentation into MusicXML.
-   - **Multi-Page Concatenation (`merge_music21_scores`)**: Automatically recognizes every page of multi-page scores and merges parts and measures sequentially into a single continuous score.
-   - **Graceful Fallback Mode**: If `oemer` models are downloading or running on low-resource hardware without GPU, the server automatically uses `FallbackOMR` (pure-Python image morphology + staff line projection) so uploads never fail.
-
-3. **Symbolic Synthesis (`omr_engine.build_midi_and_metadata`)**:
-   - Parses the MusicXML stream via `music21`.
-   - Computes exact duration, tempo (BPM), and polyphonic part layout.
-   - Exports standard **SMF Format 1 MIDI (.mid)** bytes with embedded `SET_TEMPO` meta-events and base64 strings.
-
-4. **Web Tone.js Player (`backend/static/index.html`)**:
-   - Minimalist Feather-style dark interface.
-   - Drag & drop document uploader with real-time stage progress feedback.
-   - Interactive Tone.js synthesizer with play/pause, scrub bar, tempo slider (40–240 BPM), and 3-octave piano visualizer.
-   - Direct download buttons for `.mid` and `.musicxml`.
+### 4-Tier OMR Engine Hierarchy
+1. **Tier 1 - Audiveris Open-Source OMR**:
+   - Industry-standard OMR engine (`audiveris` CLI or Docker container).
+   - Exports complete polyphonic score parts, clefs, accidentals, and measures.
+2. **Tier 2 - Deep Learning OMR (`oemer`)**:
+   - Neural symbol segmentation (`oemer`, `onnxruntime`, `opencv-python-headless`).
+   - Automatically downloads checkpoints in Docker container.
+3. **Tier 3 - Cloud Multimodal AI OMR (Google Gemini / OpenAI)**:
+   - When `GEMINI_API_KEY`, `GOOGLE_API_KEY`, or `OPENAI_API_KEY` is set in the environment, the server can use multimodal LLM vision to transcribe high-res sheet scans into pristine MusicXML 3.1.
+4. **Tier 4 - AdvancedVisionOMR (Local Feature Extraction)**:
+   - Pure-Python / NumPy computer vision engine that runs reliably anywhere (including CPU, ARM64, and offline environments).
+   - Features:
+     - Adaptive local contrast binarization (Sauvola/Bradley via BoxBlur) that eliminates paper gradients, shadows, and creases.
+     - Dynamic staff spacing support from 6px to 200px (no resolution caps).
+     - Full-page multi-system Grand Staff detection (pairs Treble & Bass staves across all systems).
+     - Vertical run-length staff filtering that preserves noteheads sitting on lines.
+     - Dual Solid AND Hollow notehead recognition (distinguishes half notes, whole notes, quarter notes, 8th notes).
+     - Vertical projection barline detection for true measure segmentation.
+     - Accidental detection (#, b, ♮) directly modifying diatonic pitches.
 
 ---
 
@@ -88,7 +82,7 @@ Uploads a sheet music document (PDF or Image) and returns transcribed notation a
 
 **Request**:
 - `Content-Type: multipart/form-data`
-- `file`: Document file (`.pdf`, `.png`, `.jpg`, `.tiff`)
+- `file`: Document file (`.pdf`, `.png`, `.jpg`, `.tiff`, `.webp`)
 - `title` *(optional)*: Title of the piece
 
 **Response** (`200 OK`):
@@ -97,7 +91,7 @@ Uploads a sheet music document (PDF or Image) and returns transcribed notation a
   "id": "7f8b9a2c1d0e",
   "title": "Chopin Nocturne Op 9 No 2",
   "status": "success",
-  "engine": "oemer",
+  "engine": "advanced_vision",
   "duration": 28.5,
   "bpm": 110.0,
   "measures_count": 16,
@@ -132,10 +126,12 @@ Health check reporting engine readiness:
 {
   "status": "healthy",
   "service": "PianoGlass OMR Backend",
-  "oemer_available": true,
+  "audiveris_available": false,
+  "oemer_available": false,
+  "cloud_ai_available": false,
   "poppler_available": true,
   "music21_version": "10.5.0",
-  "cached_scores_count": 3
+  "cached_scores_count": 1
 }
 ```
 
@@ -143,17 +139,24 @@ Health check reporting engine readiness:
 
 ## 📱 Connecting to the iOS App (PianoGlass)
 
-1. Ensure the backend server is running on `http://localhost:8000` (or `http://<your-lan-ip>:8000` for physical devices).
-2. Launch **PianoGlass** on iOS.
+1. Start the server locally:
+   ```bash
+   uvicorn backend.server:app --host 0.0.0.0 --port 8000
+   ```
+2. Launch **PianoGlass** on iOS (Simulator or physical device).
 3. Tap **Settings** (gear icon) → **Scanner & Recognition**.
-4. Enable **Use OMR Backend Server** and verify the server URL is set to `http://localhost:8000`.
-5. In the **Scan** tab or file importer, scan or import any sheet music.
-6. The app transmits the document to `/api/transcribe`, receives high-accuracy MusicXML, and immediately launches into **`ScorePlayerView`** for waterfall and keyboard practice!
+4. Enable **Use OMR Backend Server**.
+5. Set the server URL:
+   - **Simulator**: `http://localhost:8000`
+   - **Physical Device**: `http://<your-lan-ip>:8000` (e.g. `http://192.168.1.150:8000`)
+6. In the **Scan** tab or file importer, scan or upload any sheet music.
+7. The app transmits the document to `/api/transcribe`, receives high-accuracy MusicXML, and immediately launches into interactive score playback!
 
 ---
 
 ## 🧪 Running Automated Tests
 
 ```bash
-pytest Tests/test_backend.py -v
+# Run backend test suite
+python -m pytest Tests/test_backend.py -v
 ```
