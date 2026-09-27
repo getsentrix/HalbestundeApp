@@ -30,7 +30,8 @@ public struct ScorePlayerView: View {
     
     public var body: some View {
         NavigationStack {
-            if viewModel.currentScore.measures.isEmpty {
+            Group {
+                if viewModel.currentScore.measures.isEmpty {
                 VStack(spacing: 16) {
                     Image(systemName: "play.circle")
                         .font(.system(size: 52))
@@ -47,8 +48,6 @@ public struct ScorePlayerView: View {
                         .padding(.horizontal, 36)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .navigationTitle("Player")
-                .navigationBarTitleDisplayMode(.inline)
             } else {
                 ScrollView {
                     VStack(spacing: 22) {
@@ -283,6 +282,7 @@ public struct ScorePlayerView: View {
                     .padding(.top, 4)
                     .padding(.bottom, 24)
                 }
+            }
             }
             }
             .navigationTitle("Player")
