@@ -1,16 +1,54 @@
-name: Build iOS IPA
+name: Build & Release iOS IPA (AltStore)
 
 on:
   push:
     branches: [ master, main ]
+    paths:
+      - 'Sources/**'
+      - 'HalbestundeApp.xcodeproj/**'
+      - 'Package.swift'
+      - '.github/workflows/**'
   workflow_dispatch:
+    inputs:
+      bump_type:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      custom_version:
+        description: 'Custom version override (e.g. 1.0.2)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
 
 jobs:
-  build-ipa:
+  release-ipa:
     runs-on: macos-14
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Bump Version & Prepare Manifests
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.custom_version }}" ]; then
+            python3 scripts/bump_version.py --set-version "${{ github.event.inputs.custom_version }}"
+          else
+            BUMP_TYPE="${{ github.event.inputs.bump_type }}"
+            if [ -z "$BUMP_TYPE" ]; then
+              BUMP_TYPE="patch"
+            fi
+            python3 scripts/bump_version.py --bump "$BUMP_TYPE"
+          fi
 
       - name: Select Xcode 15
         run: sudo xcode-select -switch /Applications/Xcode_15.4.app/Contents/Developer
@@ -36,6 +74,55 @@ jobs:
           cd build
           zip -r HalbestundeApp.ipa Payload
           ls -lh HalbestundeApp.ipa
+
+      - name: Record Exact IPA Size
+        run: |
+          IPA_SIZE=$(stat -f%z build/HalbestundeApp.ipa)
+          echo "IPA Size: $IPA_SIZE bytes"
+          python3 scripts/bump_version.py --set-size "$IPA_SIZE"
+
+      - name: Publish GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          if [ -z "$TAG" ]; then
+            VER=$(python3 -c "import json; print(json.load(open('apps.json'))['apps'][0]['version'])")
+            TAG="v$VER"
+          fi
+
+          NOTES="### Halbestunde ${TAG}
+
+          Automated update release for AltStore & LiveContainer.
+
+          #### Changes
+          - Clean minimal feather-inspired sheet music scanner
+          - On-device acoustic grand piano audio engine
+          - Secure score storage in encrypted application sandbox
+
+          #### Sideloading
+          - **AltStore / LiveContainer Source**: https://getsentrix.github.io/HalbestundeApp/apps.json
+          - **Direct IPA Download**: https://github.com/getsentrix/HalbestundeApp/releases/download/${TAG}/HalbestundeApp.ipa"
+
+          echo "Publishing release $TAG..."
+          gh release create "$TAG" build/HalbestundeApp.ipa \
+            --title "Halbestunde $TAG" \
+            --notes "$NOTES" || gh release upload "$TAG" build/HalbestundeApp.ipa --clobber
+
+      - name: Push Version Manifest Updates
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          if [ -z "$TAG" ]; then
+            VER=$(python3 -c "import json; print(json.load(open('apps.json'))['apps'][0]['version'])")
+            TAG="v$VER"
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add apps.json docs/apps.json docs/index.html index.html Sources/HalbestundeApp/App/Info.plist HalbestundeApp.xcodeproj/project.pbxproj
+          git commit -m "chore(release): bump version to $TAG [skip ci]" || echo "No changes to commit"
+          git pull --rebase origin master
+          git push origin master
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
