@@ -50,6 +50,10 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
     public func parse(xmlData: Data) -> Score? {
         let parser = XMLParser(data: xmlData)
         parser.delegate = self
+        // Security hardening: Disable external entity and DTD resolution to prevent XXE
+        parser.shouldResolveExternalEntities = false
+        parser.shouldProcessNamespaces = false
+        parser.shouldReportNamespacePrefixes = false
         
         measures.removeAll()
         currentMeasureIndex = 0

@@ -55,18 +55,19 @@ public struct SongLibraryView: View {
                                 .font(.headline)
                                 .foregroundColor(.primary)
                             
-                            Text(viewModel.searchQuery.isEmpty ? "No pieces in this category yet." : "No results matching \"\(viewModel.searchQuery)\".")
+                            Text(viewModel.searchQuery.isEmpty ? "Scan sheet music to add it to your library." : "No results matching \"\(viewModel.searchQuery)\".")
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
                                 .multilineTextAlignment(.center)
                             
-                            if filterMode == 1 {
-                                Button("Scan Sheet Music") {
-                                    showScannerSheet = true
-                                }
-                                .buttonStyle(.bordered)
-                                .padding(.top, 4)
+                            Button(action: {
+                                showScannerSheet = true
+                            }) {
+                                Label("Scan Sheet Music", systemImage: "doc.viewfinder")
+                                    .fontWeight(.semibold)
                             }
+                            .buttonStyle(.borderedProminent)
+                            .padding(.top, 4)
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 32)
@@ -142,7 +143,7 @@ public struct SongLibraryView: View {
     }
     
     private func playSong(_ song: SongItem) {
-        let score = song.previewScore ?? RepertoireService.shared.furEliseScore()
+        guard let score = song.previewScore else { return }
         onSongSelected(score)
     }
     

@@ -30,8 +30,28 @@ public struct ScorePlayerView: View {
     
     public var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 22) {
+            if viewModel.currentScore.measures.isEmpty {
+                VStack(spacing: 16) {
+                    Image(systemName: "play.circle")
+                        .font(.system(size: 52))
+                        .foregroundColor(.secondary.opacity(0.5))
+                    
+                    Text("No Score Loaded")
+                        .font(.title3.weight(.bold))
+                        .foregroundColor(.primary)
+                    
+                    Text("Scan sheet music or select a piece from your library to start playback.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 36)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .navigationTitle("Player")
+                .navigationBarTitleDisplayMode(.inline)
+            } else {
+                ScrollView {
+                    VStack(spacing: 22) {
                     // 1. Cover / Score Preview Switcher
                     Picker("Preview Mode", selection: $previewMode) {
                         Text("Score").tag(0)
@@ -263,6 +283,7 @@ public struct ScorePlayerView: View {
                     .padding(.top, 4)
                     .padding(.bottom, 24)
                 }
+            }
             }
             .navigationTitle("Player")
             .navigationBarTitleDisplayMode(.inline)

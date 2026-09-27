@@ -3,7 +3,7 @@
 //  HalbestundeApp
 //
 //  Clean, minimal native iOS settings view with inset grouped list styling.
-//  Configures audio engine acoustics, OMR recognition filters, and app preferences.
+//  Simple controls, zero jargon, and link to GitHub repository.
 //
 
 import SwiftUI
@@ -11,8 +11,7 @@ import SwiftUI
 public struct SettingsView: View {
     @ObservedObject var audioEngine: PianoAudioEngine
     @AppStorage("hapticsEnabled") private var hapticsEnabled: Bool = true
-    @AppStorage("audioLatencyLow") private var audioLatencyLow: Bool = true
-    @AppStorage("omrSensitivityHigh") private var omrSensitivityHigh: Bool = true
+    @AppStorage("enhanceScanContrast") private var enhanceScanContrast: Bool = true
     
     public init(audioEngine: PianoAudioEngine = .shared) {
         self.audioEngine = audioEngine
@@ -21,11 +20,11 @@ public struct SettingsView: View {
     public var body: some View {
         NavigationStack {
             List {
-                // Audio Engine Section
+                // Audio Section
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Text("Master Volume")
+                            Text("Volume")
                             Spacer()
                             Text("\(Int(audioEngine.masterVolume * 100))%")
                                 .foregroundColor(.secondary)
@@ -46,30 +45,55 @@ public struct SettingsView: View {
                         }
                     }
                     .padding(.vertical, 4)
-                    
-                    Toggle("Low-Latency Audio Buffer", isOn: $audioLatencyLow)
-                    
-                    LabeledContent("Acoustic Model", value: "Procedural Grand Piano")
                 } header: {
-                    Text("Audio & Acoustics")
-                } footer: {
-                    Text("Real-time physical acoustic model using high-resolution harmonic sine synthesis and polyphonic envelope shaping.")
+                    Text("Audio")
                 }
                 
-                // OMR Section
+                // Scanner Section
                 Section {
-                    Toggle("High-Sensitivity Notehead Filter", isOn: $omrSensitivityHigh)
+                    Toggle("Enhance Scan Contrast", isOn: $enhanceScanContrast)
                 } header: {
-                    Text("Optical Music Recognition (OMR)")
+                    Text("Scanner")
                 } footer: {
-                    Text("Uses Apple Vision contour detection and horizontal staff projection to recognize staves, accidentals, and rhythms from sheet music.")
+                    Text("Improves recognition on faintly printed sheet music.")
                 }
                 
-                // Haptics Section
+                // Touch & Feedback
                 Section {
                     Toggle("Haptic Feedback", isOn: $hapticsEnabled)
                 } header: {
-                    Text("Haptics & Touch")
+                    Text("Preferences")
+                }
+                
+                // Source Code & Links Section
+                Section {
+                    Link(destination: URL(string: "https://github.com/getsentrix/HalbestundeApp")!) {
+                        HStack {
+                            Label("Source Code", systemImage: "chevron.left.forwardslash.chevron.right")
+                                .foregroundColor(.primary)
+                            Spacer()
+                            HStack(spacing: 4) {
+                                Text("GitHub")
+                                    .foregroundColor(.secondary)
+                                Image(systemName: "arrow.up.right")
+                                    .font(.caption2.bold())
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                    
+                    Link(destination: URL(string: "https://getsentrix.github.io/HalbestundeApp/")!) {
+                        HStack {
+                            Label("Website", systemImage: "safari")
+                                .foregroundColor(.primary)
+                            Spacer()
+                            Image(systemName: "arrow.up.right")
+                                .font(.caption2.bold())
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                } header: {
+                    Text("Open Source")
                 }
                 
                 // About Section
@@ -77,26 +101,25 @@ public struct SettingsView: View {
                     HStack(spacing: 14) {
                         ZStack {
                             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(Color.accentColor.opacity(0.15))
-                                .frame(width: 48, height: 48)
+                                .fill(Color.accentColor.opacity(0.12))
+                                .frame(width: 44, height: 44)
                             
-                            Image(systemName: "music.note.tv.fill")
-                                .font(.system(size: 24))
+                            Image(systemName: "music.note")
+                                .font(.system(size: 20))
                                 .foregroundColor(.accentColor)
                         }
                         
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Halbestunde iOS")
+                            Text("Halbestunde")
                                 .font(.headline)
-                            Text("Version 1.0.0 (Build 1)")
+                            Text("Version 1.0.0")
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
                         }
                     }
                     .padding(.vertical, 4)
                     
-                    LabeledContent("Architecture", value: "Pure Native Swift & SwiftUI")
-                    LabeledContent("Compatibility", value: "iOS 17.0+ • iPhone & iPad")
+                    LabeledContent("Compatibility", value: "iOS 17.0+")
                 } header: {
                     Text("About")
                 }

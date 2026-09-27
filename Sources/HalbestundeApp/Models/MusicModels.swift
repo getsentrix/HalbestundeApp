@@ -357,4 +357,13 @@ public struct Score: Identifiable, Codable, Equatable {
     public static func == (lhs: Score, rhs: Score) -> Bool {
         lhs.id == rhs.id && lhs.title == rhs.title && lhs.measures == rhs.measures
     }
+    
+    public static let empty = Score(
+        title: "No Score Selected",
+        composer: "",
+        defaultBPM: 120.0,
+        timeSignature: .commonTime,
+        keySignature: KeySignature(fifths: 0, mode: "major"),
+        measures: []
+    )
 }

@@ -55,7 +55,6 @@ def test_swift_code_integrity():
         "Sources/HalbestundeApp/Views/Library/SongLibraryView.swift",
         "Sources/HalbestundeApp/Views/ScorePlayerView.swift",
         "Sources/HalbestundeApp/Views/Settings/SettingsView.swift",
-        "Sources/HalbestundeApp/Resources/fur_elise.musicxml",
         "Tests/HalbestundeAppTests/ScoreModelTests.swift",
         "Tests/HalbestundeAppTests/MusicXMLParserTests.swift",
         "Tests/HalbestundeAppTests/PracticeControlsTests.swift",
@@ -139,14 +138,24 @@ def test_omr_staff_pitch_mapping():
 
 def test_musicxml_multistaff_timing():
     print("[4/6] Testing MusicXML multi-staff polyphony and timing engine...")
-    # Simulate MusicXML parser algorithm implemented in MusicXMLParser.swift
-    xml_path = "Sources/HalbestundeApp/Resources/fur_elise.musicxml"
-    tree = ET.parse(xml_path)
-    root = tree.getroot()
-    
+    xml_data = """<?xml version="1.0" encoding="UTF-8"?>
+    <score-partwise version="3.1">
+      <part id="P1">
+        <measure number="1">
+          <note><pitch><step>D</step><octave>5</octave></pitch><duration>1</duration><staff>1</staff></note>
+          <note><pitch><step>C</step><octave>5</octave></pitch><duration>1</duration><staff>1</staff></note>
+          <note><pitch><step>A</step><octave>4</octave></pitch><duration>1</duration><staff>1</staff></note>
+          <backup><duration>3</duration></backup>
+          <note><pitch><step>A</step><octave>2</octave></pitch><duration>1</duration><staff>2</staff></note>
+          <note><pitch><step>E</step><octave>3</octave></pitch><duration>1</duration><staff>2</staff></note>
+          <note><pitch><step>A</step><octave>3</octave></pitch><duration>1</duration><staff>2</staff></note>
+        </measure>
+      </part>
+    </score-partwise>"""
+    root = ET.fromstring(xml_data)
     divisions = 2
     measures = root.findall(".//measure")
-    m3 = measures[2] # Measure 3: Beethoven right hand D5, C5, A4 and left hand A2, E3, A3
+    m3 = measures[0]
     
     # Run the exact timeline algorithm from MusicXMLParser.swift
     notes = m3.findall("note")

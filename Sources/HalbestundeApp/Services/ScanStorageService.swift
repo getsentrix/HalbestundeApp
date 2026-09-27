@@ -2,7 +2,8 @@
 //  ScanStorageService.swift
 //  HalbestundeApp
 //
-//  Local JSON persistence for user-scanned sheet music.
+//  Secure local JSON persistence for user-scanned sheet music scores.
+//  Uses Application Support with hardware Data Protection encryption.
 //
 
 import Foundation
@@ -10,12 +11,23 @@ import Foundation
 public final class ScanStorageService {
     public static let shared = ScanStorageService()
     
-    private let storageKey = "com.halbestunde.scannedSongs"
     private let fileManager = FileManager.default
     
+    private var storageDirectoryURL: URL? {
+        guard let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            return fileManager.urls(for: .documentDirectory, in: .userDomainMask).first
+        }
+        let dir = appSupport.appendingPathComponent("Scores", isDirectory: true)
+        if !fileManager.fileExists(atPath: dir.path) {
+            try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true, attributes: [
+                .protectionKey: FileProtectionType.complete
+            ])
+        }
+        return dir
+    }
+    
     private var storageFileURL: URL? {
-        fileManager.urls(for: .documentDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("scanned_scores.json")
+        storageDirectoryURL?.appendingPathComponent("scanned_scores.json")
     }
     
     public init() {}
@@ -39,7 +51,6 @@ public final class ScanStorageService {
             let songs = try JSONDecoder().decode([SongItem].self, from: data)
             return songs
         } catch {
-            print("[ScanStorageService] Error loading songs: \(error)")
             return []
         }
     }
@@ -54,9 +65,9 @@ public final class ScanStorageService {
         guard let url = storageFileURL else { return }
         do {
             let data = try JSONEncoder().encode(songs)
-            try data.write(to: url, options: .atomic)
+            try data.write(to: url, options: [.atomic, .completeFileProtection])
         } catch {
-            print("[ScanStorageService] Error saving songs: \(error)")
+            // Silently fail without exposing sensitive paths
         }
     }
 }

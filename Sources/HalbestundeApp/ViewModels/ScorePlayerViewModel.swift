@@ -76,7 +76,7 @@ public final class ScorePlayerViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     
     public init(
-        score: Score = RepertoireService.shared.furEliseScore(),
+        score: Score = .empty,
         audioEngine: PianoAudioEngine = .shared
     ) {
         self.currentScore = score

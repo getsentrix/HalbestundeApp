@@ -99,20 +99,18 @@ public struct ScannerView: View {
                     .buttonStyle(.borderedProminent)
                     .disabled(viewModel.isProcessing)
                     
-                    // Secondary Actions: Photo Import & Sample Demo
-                    HStack(spacing: 12) {
                         PhotosPicker(
                             selection: $selectedPhotoItem,
                             matching: .images,
                             photoLibrary: .shared()
                         ) {
-                            HStack(spacing: 6) {
+                            HStack(spacing: 8) {
                                 Image(systemName: "photo.on.rectangle")
-                                Text("Import Photo")
+                                Text("Import from Photos")
                             }
-                            .font(.subheadline.weight(.medium))
+                            .font(.headline)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 11)
+                            .padding(.vertical, 14)
                         }
                         .buttonStyle(.bordered)
                         .disabled(viewModel.isProcessing)
@@ -125,28 +123,9 @@ public struct ScannerView: View {
                                     await MainActor.run {
                                         viewModel.processCapturedImage(cgImage, title: "Imported Sheet Music")
                                     }
-                                } else {
-                                    await MainActor.run {
-                                        viewModel.triggerDemoScan(title: "Imported Sheet Music")
-                                    }
                                 }
                             }
                         }
-                        
-                        Button(action: {
-                            viewModel.triggerDemoScan(title: "Scanned Chopin Nocturne")
-                        }) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "sparkles")
-                                Text("Sample Score")
-                            }
-                            .font(.subheadline.weight(.medium))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 11)
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(viewModel.isProcessing)
-                    }
                 }
                 .padding(.horizontal, 20)
                 
