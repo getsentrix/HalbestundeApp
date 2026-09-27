@@ -75,4 +75,10 @@ public struct SongItem: Identifiable, Codable, Equatable {
         self.timeSignatureDisplay = timeSignatureDisplay
         self.previewScore = previewScore
     }
+    
+    public var durationFormatted: String {
+        let mins = Int(durationSeconds) / 60
+        let secs = Int(durationSeconds) % 60
+        return String(format: "%d:%02d", mins, secs)
+    }
 }

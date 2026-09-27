@@ -201,7 +201,7 @@ public struct ScorePlayerView: View {
                             Button("1.25x Speed") { viewModel.tempoBPM = viewModel.currentScore.defaultBPM * 1.25 }
                             Button("1.5x Speed") { viewModel.tempoBPM = viewModel.currentScore.defaultBPM * 1.5 }
                             Button("2.0x Double") { viewModel.tempoBPM = viewModel.currentScore.defaultBPM * 2.0 }
-                        } Label: {
+                        } label: {
                             HStack(spacing: 4) {
                                 Image(systemName: "speedometer")
                                 Text(String(format: "%.2fx", viewModel.tempoBPM / max(1.0, viewModel.currentScore.defaultBPM)))
@@ -266,7 +266,7 @@ public struct ScorePlayerView: View {
                         Toggle("Looping", isOn: $viewModel.isLoopingEnabled)
                         Toggle("Solo Right Hand", isOn: $viewModel.isRightHandSolo)
                         Toggle("Solo Left Hand", isOn: $viewModel.isLeftHandSolo)
-                    } Label: {
+                    } label: {
                         Image(systemName: "ellipsis.circle")
                     }
                 }
