@@ -397,7 +397,7 @@ public final class MusicScannerService: ObservableObject {
         
         // Attach Gemini API key and model headers if configured
         let geminiKey = UserDefaults.standard.string(forKey: "geminiAPIKey")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let geminiModel = UserDefaults.standard.string(forKey: "geminiModel") ?? "gemini-2.5-flash"
+        let geminiModel = UserDefaults.standard.string(forKey: "geminiModel") ?? "gemini-3.8-flash"
         if !geminiKey.isEmpty {
             request.setValue(geminiKey, forHTTPHeaderField: "X-Gemini-API-Key")
             request.setValue(geminiModel, forHTTPHeaderField: "X-Gemini-Model")
@@ -475,8 +475,8 @@ public final class MusicScannerService: ObservableObject {
         apiKey: String,
         scoreTitle: String
     ) async throws -> Score? {
-        let preferredModel = UserDefaults.standard.string(forKey: "geminiModel") ?? "gemini-2.5-flash"
-        let fallbackModel = (preferredModel == "gemini-2.5-flash") ? "gemini-2.0-flash-lite" : "gemini-2.5-flash"
+        let preferredModel = UserDefaults.standard.string(forKey: "geminiModel") ?? "gemini-3.8-flash"
+        let fallbackModel = (preferredModel == "gemini-3.8-flash") ? "gemini-3.5-flash-lite" : "gemini-3.8-flash"
         
         let candidateModels = [preferredModel, fallbackModel]
         var lastError: Error?

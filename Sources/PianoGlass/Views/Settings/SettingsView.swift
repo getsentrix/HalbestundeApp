@@ -15,7 +15,7 @@ public struct SettingsView: View {
     @AppStorage("omrBackendURL") private var omrBackendURL: String = "http://localhost:8000"
     @AppStorage("useRemoteOMR") private var useRemoteOMR: Bool = true
     @AppStorage("geminiAPIKey") private var geminiAPIKey: String = ""
-    @AppStorage("geminiModel") private var geminiModel: String = "gemini-2.5-flash"
+    @AppStorage("geminiModel") private var geminiModel: String = "gemini-3.8-flash"
     @State private var isShowingAPIKey: Bool = false
     @State private var isTestingGeminiKey: Bool = false
     @State private var geminiTestStatus: String? = nil
@@ -165,13 +165,13 @@ public struct SettingsView: View {
                     .padding(.vertical, 2)
                     
                     Picker("Model", selection: $geminiModel) {
-                        Text("Gemini 2.5 Flash (Best Quality)").tag("gemini-2.5-flash")
-                        Text("Gemini 2.0 Flash Lite (Faster)").tag("gemini-2.0-flash-lite")
+                        Text("Gemini 3.8 Flash (High Intelligence)").tag("gemini-3.8-flash")
+                        Text("Gemini 3.5 Flash-Lite (Fast)").tag("gemini-3.5-flash-lite")
                     }
                 } header: {
                     Text("Neural Music Recognition (AI)")
                 } footer: {
-                    Text("Uses Google Gemini 2.5 Flash or Gemini 2.0 Flash Lite to transcribe complex polyphonic piano sheet music with exact chords, accidentals, and measures. Free API keys are available at Google AI Studio.")
+                    Text("Uses Google Gemini 3.8 Flash or Gemini 3.5 Flash-Lite to transcribe complex polyphonic piano sheet music with exact chords, accidentals, and measures. Free API keys are available at Google AI Studio.")
                 }
                 
                 // Touch & Feedback
