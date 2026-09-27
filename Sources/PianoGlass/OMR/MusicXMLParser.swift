@@ -11,7 +11,7 @@ import Foundation
 public final class MusicXMLParser: NSObject, XMLParserDelegate {
     private var scoreTitle: String = "Untitled Score"
     private var composer: String = "Unknown Composer"
-    private var divisions: Int = 1
+    private var divisions: Int = 4
     private var timeSignature = TimeSignature(numerator: 4, denominator: 4)
     private var keySignature = KeySignature(fifths: 0, mode: "major")
     private var measures = [Measure]()
@@ -22,6 +22,7 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
     private var currentMeasureIndex: Int = 0
     private var currentMeasureBeatStart: Double = 0.0
     private var currentMeasureNotes = [NoteEvent]()
+    private var measureAccidentals: [String: Int] = [:]
     
     // Timeline tracking inside measure
     private var globalMeasureTicks: Int = 0
@@ -36,11 +37,12 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
     private var isRestNote: Bool = false
     private var isTieStart: Bool = false
     private var isTieStop: Bool = false
+    private var hasExplicitAlter: Bool = false
     private var currentNoteType: String = ""
     private var currentStep: String = "C"
     private var currentOctave: Int = 4
     private var currentAlter: Int = 0
-    private var currentDurationTicks: Int = 1
+    private var currentDurationTicks: Int = 4
     private var currentStaffNumber: Int = 1
     private var currentVoice: Int = 1
     private var lastNoteStartTicks: Int = 0
@@ -97,6 +99,7 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
         
         if elementName == "measure" {
             currentMeasureNotes = []
+            measureAccidentals.removeAll()
             globalMeasureTicks = 0
             staffTickCursors = [1: 0, 2: 0]
             lastStaffNoteStartTicks = [1: 0, 2: 0]
@@ -110,6 +113,7 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
             isRestNote = false
             isTieStart = false
             isTieStop = false
+            hasExplicitAlter = false
             currentNoteType = ""
             currentStep = "C"
             currentOctave = 4
@@ -175,7 +179,18 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
         case "octave":
             if let oct = Int(currentText) { currentOctave = oct }
         case "alter":
-            if let alt = Int(currentText) { currentAlter = alt }
+            if let alt = Int(currentText) {
+                currentAlter = alt
+                hasExplicitAlter = true
+            }
+        case "accidental":
+            let acc = currentText.lowercased()
+            hasExplicitAlter = true
+            if acc == "natural" { currentAlter = 0 }
+            else if acc == "sharp" { currentAlter = 1 }
+            else if acc == "flat" { currentAlter = -1 }
+            else if acc == "double-sharp" { currentAlter = 2 }
+            else if acc == "flat-flat" { currentAlter = -2 }
         case "duration":
             if let dur = Int(currentText) {
                 if inBackup || inForward {
@@ -217,8 +232,11 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
                 let div = max(1, divisions)
                 switch currentNoteType {
                 case "whole": effectiveTicks = div * 4
+                case "dotted-half", "dotted half": effectiveTicks = div * 3
                 case "half": effectiveTicks = div * 2
+                case "dotted-quarter", "dotted quarter": effectiveTicks = Int(Double(div) * 1.5)
                 case "quarter": effectiveTicks = div
+                case "dotted-eighth", "dotted eighth": effectiveTicks = max(1, Int(Double(div) * 0.75))
                 case "eighth": effectiveTicks = max(1, div / 2)
                 case "16th", "sixteenth": effectiveTicks = max(1, div / 4)
                 case "32nd": effectiveTicks = max(1, div / 8)
@@ -227,6 +245,17 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
             }
             if effectiveTicks <= 0 {
                 effectiveTicks = max(1, divisions)
+            }
+            
+            // Resolve chromatic alteration: explicit accidental vs key signature
+            if !hasExplicitAlter {
+                if let remembered = measureAccidentals[currentStep] {
+                    currentAlter = remembered
+                } else {
+                    currentAlter = keySignatureAlter(step: currentStep, fifths: keySignature.fifths)
+                }
+            } else {
+                measureAccidentals[currentStep] = currentAlter
             }
             
             let durationBeats = max(0.125, Double(effectiveTicks) / Double(max(1, divisions)))
@@ -279,7 +308,12 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
                     measureDuration = timeSignature.beatsPerMeasure
                 }
             } else {
-                measureDuration = timeSignature.beatsPerMeasure
+                let maxEnd = currentMeasureNotes.map { ($0.startBeat - currentMeasureBeatStart) + $0.durationBeats }.max() ?? timeSignature.beatsPerMeasure
+                if maxEnd > timeSignature.beatsPerMeasure {
+                    measureDuration = maxEnd
+                } else {
+                    measureDuration = timeSignature.beatsPerMeasure
+                }
             }
             
             let measure = Measure(
@@ -297,5 +331,22 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
         default:
             break
         }
+    }
+    
+    private func keySignatureAlter(step: String, fifths: Int) -> Int {
+        let sharpOrder = ["F", "C", "G", "D", "A", "E", "B"]
+        let flatOrder = ["B", "E", "A", "D", "G", "C", "F"]
+        if fifths > 0 {
+            let count = min(7, fifths)
+            if sharpOrder.prefix(count).contains(step) {
+                return 1
+            }
+        } else if fifths < 0 {
+            let count = min(7, -fifths)
+            if flatOrder.prefix(count).contains(step) {
+                return -1
+            }
+        }
+        return 0
     }
 }

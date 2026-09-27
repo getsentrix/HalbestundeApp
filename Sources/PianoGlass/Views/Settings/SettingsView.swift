@@ -228,7 +228,7 @@ public struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("PianoGlass")
                                 .font(.headline)
-                            Text("Version 1.0.0")
+                            Text("Version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.21")")
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
                         }

@@ -164,8 +164,9 @@ private struct MeasureView: View {
                 // Animated Playhead cursor across current measure
                 if isCurrentMeasure {
                     let measureProgress = max(0.0, min(1.0, (viewModel.currentBeat - measure.startBeat) / measure.durationBeats))
+                    let playheadX = 25.0 + (geo.size.width - 45.0) * CGFloat(measureProgress)
                     PlayheadCursorView()
-                        .offset(x: geo.size.width * CGFloat(measureProgress))
+                        .offset(x: playheadX)
                 }
             }
         }

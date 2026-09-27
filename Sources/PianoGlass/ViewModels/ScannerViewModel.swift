@@ -112,8 +112,8 @@ public final class ScannerViewModel: ObservableObject {
                     // 1. Immediately save to persistent storage
                     let savedScore = self.saveAndOpenScore(score: scanResult.recognizedScore) ?? scanResult.recognizedScore
                     
-                    // 2. Provide feedback, then transition directly to the player
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    // 2. Provide feedback, then transition directly to the player with smooth spring
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) {
                         self.isProcessing = false
                         self.onScoreAccepted?(savedScore)
                     }
@@ -276,7 +276,7 @@ public final class ScannerViewModel: ObservableObject {
             errorMessage = notice
         }
         
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) { [weak self] in
             guard let self = self else { return }
             self.isProcessing = false
             self.onScoreAccepted?(savedScore)

@@ -143,7 +143,9 @@ public struct ScorePlayerView: View {
                             in: 0...totalBeats,
                             onEditingChanged: { editing in
                                 isDraggingScrubber = editing
-                                if !editing {
+                                if editing {
+                                    scrubBeat = viewModel.currentBeat
+                                } else {
                                     #if canImport(UIKit)
                                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
                                     #endif
@@ -154,7 +156,8 @@ public struct ScorePlayerView: View {
                         .tint(.accentColor)
                         
                         HStack {
-                            Text(viewModel.formattedCurrentTime)
+                            let displayBeat = isDraggingScrubber ? scrubBeat : viewModel.currentBeat
+                            Text(isDraggingScrubber ? viewModel.formatTime(forBeat: displayBeat) : viewModel.formattedCurrentTime)
                                 .font(.caption.monospacedDigit())
                                 .foregroundColor(.secondary)
                             Spacer()
@@ -164,7 +167,7 @@ public struct ScorePlayerView: View {
                                 #endif
                                 showRemainingTime.toggle()
                             }) {
-                                Text(showRemainingTime ? viewModel.formattedRemainingTime : viewModel.formattedTotalTime)
+                                Text(showRemainingTime ? (isDraggingScrubber ? viewModel.formatRemainingTime(forBeat: displayBeat) : viewModel.formattedRemainingTime) : viewModel.formattedTotalTime)
                                     .font(.caption.monospacedDigit())
                                     .foregroundColor(.secondary)
                                     .padding(.vertical, 4)

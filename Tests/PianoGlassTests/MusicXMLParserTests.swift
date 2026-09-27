@@ -306,4 +306,41 @@ final class MusicXMLParserTests: XCTestCase {
         XCTAssertEqual(notes[0].durationBeats, 1.0, "Quarter note fallback should equal 1.0 beat")
         XCTAssertEqual(notes[1].durationBeats, 2.0, "Half note fallback should equal 2.0 beats")
     }
+    
+    func testKeySignatureAccidentalResolution() {
+        // G Major (1 sharp): F4 should resolve to F#4 (MIDI 66) without explicit alter
+        let gMajorXML = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <score-partwise version="3.1">
+          <part id="P1">
+            <measure number="1">
+              <attributes>
+                <divisions>4</divisions>
+                <key><fifths>1</fifths><mode>major</mode></key>
+                <time><beats>4</beats><beat-type>4</beat-type></time>
+                <staves>1</staves>
+              </attributes>
+              <note>
+                <pitch><step>F</step><octave>4</octave></pitch>
+                <duration>4</duration>
+                <staff>1</staff>
+              </note>
+              <note>
+                <pitch><step>C</step><octave>4</octave></pitch>
+                <duration>4</duration>
+                <staff>1</staff>
+              </note>
+            </measure>
+          </part>
+        </score-partwise>
+        """
+        let parser = MusicXMLParser()
+        let score = parser.parse(xmlString: gMajorXML)
+        XCTAssertNotNil(score)
+        let notes = score?.measures.first?.notes ?? []
+        XCTAssertEqual(notes.count, 2)
+        XCTAssertEqual(notes[0].pitch.midiNumber, 66, "F4 in G Major (1 sharp) must resolve to F#4 (66)")
+        XCTAssertEqual(notes[0].accidental, .sharp)
+        XCTAssertEqual(notes[1].pitch.midiNumber, 60, "C4 in G Major must remain C4 (60)")
+    }
 }

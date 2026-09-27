@@ -147,10 +147,33 @@ public final class ScorePlayerViewModel: ObservableObject {
     
     public func seek(toBeat beat: Double) {
         audioScheduler.seek(toBeat: beat)
+        if !isPlaying {
+            previewNotes(atBeat: beat)
+        }
     }
     
     public func seek(toMeasure measureIndex: Int) {
         audioScheduler.seek(toMeasure: measureIndex)
+        if !isPlaying, let score = currentScore as Score?, score.measures.indices.contains(measureIndex) {
+            previewNotes(atBeat: score.measures[measureIndex].startBeat)
+        }
+    }
+    
+    /// Provides immediate acoustic feedback by sounding the notes at the scrubbed beat
+    public func previewNotes(atBeat beat: Double) {
+        for measure in currentScore.measures {
+            if beat >= measure.startBeat - 0.25 && beat <= (measure.startBeat + measure.durationBeats + 0.25) {
+                for note in measure.notes where !note.isRest {
+                    if beat >= note.startBeat && beat < note.endBeat {
+                        let finalPitch = note.pitch.transposed(by: transpositionSemitones).midiNumber
+                        audioEngine.noteOn(pitch: finalPitch, velocity: 0.65)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                            self?.audioEngine.noteOff(pitch: finalPitch)
+                        }
+                    }
+                }
+            }
+        }
     }
     
     public func setLoopMeasureA(_ measure: Int) {
@@ -199,11 +222,24 @@ public final class ScorePlayerViewModel: ObservableObject {
         return min(1.0, max(0.0, currentBeat / total))
     }
     
-    public var formattedCurrentTime: String {
-        let seconds = (currentBeat / tempoBPM) * 60.0
+    public func formatTime(forBeat beat: Double) -> String {
+        let seconds = (beat / tempoBPM) * 60.0
         let mins = Int(seconds) / 60
         let secs = Int(seconds) % 60
         return String(format: "%d:%02d", mins, secs)
+    }
+    
+    public func formatRemainingTime(forBeat beat: Double) -> String {
+        let total = currentScore.durationSeconds(at: tempoBPM)
+        let current = (beat / tempoBPM) * 60.0
+        let remaining = max(0.0, total - current)
+        let mins = Int(remaining) / 60
+        let secs = Int(remaining) % 60
+        return String(format: "-%d:%02d", mins, secs)
+    }
+    
+    public var formattedCurrentTime: String {
+        formatTime(forBeat: currentBeat)
     }
     
     public var formattedTotalTime: String {
@@ -214,11 +250,6 @@ public final class ScorePlayerViewModel: ObservableObject {
     }
     
     public var formattedRemainingTime: String {
-        let total = currentScore.durationSeconds(at: tempoBPM)
-        let current = (currentBeat / tempoBPM) * 60.0
-        let remaining = max(0.0, total - current)
-        let mins = Int(remaining) / 60
-        let secs = Int(remaining) % 60
-        return String(format: "-%d:%02d", mins, secs)
+        formatRemainingTime(forBeat: currentBeat)
     }
 }
