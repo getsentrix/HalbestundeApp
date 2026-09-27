@@ -12,12 +12,12 @@
       "developerName": "Dylan",
       "version": "1.0.0",
       "versionDate": "2026-09-27T04:00:00Z",
-      "versionDescription": "Initial v1.0.0 Release:\n\u2022 Liquid Glass (Glassmorphism) UI with .ultraThinMaterial and specular rim glows\n\u2022 Camera sheet music scanner with Optical Music Recognition (OMR)\n\u2022 Physical modeling polyphonic acoustic grand piano audio engine\n\u2022 Interactive score canvas with synchronized animated playhead\n\u2022 61/88-key lighted virtual piano keyboard with dual-hand color cues\n\u2022 Practice suite: A-B looping, tempo slider (40-240 BPM), transposition, LH/RH isolation\n\u2022 Preloaded classical repertoire (F\u00fcr Elise, Moonlight Sonata, Minuet in G, Chopin Nocturne)",
+      "versionDescription": "Release v1.0.0:\n• Sheet music scanner with camera capture and photo import\n• On-device acoustic grand piano audio engine\n• Minimal player with scrub bar, tempo slider, and looping\n• Score library with secure local storage",
       "downloadURL": "https://github.com/getsentrix/HalbestundeApp/releases/download/v1.0.0/HalbestundeApp.ipa",
       "localizedDescription": "Halbestunde turns sheet music into playable audio with Apple Vision OMR and native audio playback in a distraction-free, minimal iOS interface.",
       "iconURL": "https://getsentrix.github.io/HalbestundeApp/assets/app-icon.png",
       "tintColor": "00E5FF",
-      "size": 714146,
+      "size": 715486,
       "minOSVersion": "17.0",
       "screenshots": [
         "https://getsentrix.github.io/HalbestundeApp/assets/screenshot-player.png",
@@ -26,19 +26,19 @@
       "appPermissions": {
         "entitlements": [],
         "privacy": {
-          "NSCameraUsageDescription": "PianoGlass requires camera access to scan piano sheet music."
+          "NSCameraUsageDescription": "Halbestunde requires camera access to scan sheet music."
         }
       }
     }
   ],
   "news": [
     {
-      "title": "PianoGlass v1.0.0 is Live!",
-      "identifier": "pianoglass-v100-announcement",
-      "caption": "Scan sheet music & practice with Liquid Glass UI",
+      "title": "Halbestunde v1.0.0 Available",
+      "identifier": "halbestunde-v100-release",
+      "caption": "Scan sheet music with minimal native iOS UI",
       "date": "2026-09-27T04:00:00Z",
       "tintColor": "00E5FF",
-      "appID": "com.dylan.halbestunde.app",
+      "appID": "com.halbestunde.app",
       "notify": true
     }
   ]
