@@ -1,0 +1,449 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		AA1000012C00000100000001 /* PianoGlassApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1000012C00000100000001 /* PianoGlassApp.swift */; };
+		AA1000022C00000100000001 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1000022C00000100000001 /* ContentView.swift */; };
+		AA1000032C00000100000001 /* MusicModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1000032C00000100000001 /* MusicModels.swift */; };
+		AA1000042C00000100000001 /* PracticeSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1000042C00000100000001 /* PracticeSession.swift */; };
+		AA1000052C00000100000001 /* SongItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1000052C00000100000001 /* SongItem.swift */; };
+		AA1000062C00000100000001 /* ScanResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1000062C00000100000001 /* ScanResult.swift */; };
+		AA1000072C00000100000001 /* LiquidGlassTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1000072C00000100000001 /* LiquidGlassTheme.swift */; };
+		AA1000082C00000100000001 /* LiquidGlassModifiers.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1000082C00000100000001 /* LiquidGlassModifiers.swift */; };
+		AA1000092C00000100000001 /* GlassComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1000092C00000100000001 /* GlassComponents.swift */; };
+		AA10000A2C00000100000001 /* PianoAudioEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB10000A2C00000100000001 /* PianoAudioEngine.swift */; };
+		AA10000B2C00000100000001 /* AudioScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB10000B2C00000100000001 /* AudioScheduler.swift */; };
+		AA10000C2C00000100000001 /* VisionStaffDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB10000C2C00000100000001 /* VisionStaffDetector.swift */; };
+		AA10000D2C00000100000001 /* NoteRecognitionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB10000D2C00000100000001 /* NoteRecognitionEngine.swift */; };
+		AA10000E2C00000100000001 /* MusicXMLParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB10000E2C00000100000001 /* MusicXMLParser.swift */; };
+		AA10000F2C00000100000001 /* MusicXMLExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB10000F2C00000100000001 /* MusicXMLExporter.swift */; };
+		AA1000102C00000100000001 /* MusicScannerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1000102C00000100000001 /* MusicScannerService.swift */; };
+		AA1000112C00000100000001 /* RepertoireService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1000112C00000100000001 /* RepertoireService.swift */; };
+		AA1000122C00000100000001 /* ScanStorageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1000122C00000100000001 /* ScanStorageService.swift */; };
+		AA1000132C00000100000001 /* ScorePlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1000132C00000100000001 /* ScorePlayerViewModel.swift */; };
+		AA1000142C00000100000001 /* ScannerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1000142C00000100000001 /* ScannerViewModel.swift */; };
+		AA1000152C00000100000001 /* SongLibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1000152C00000100000001 /* SongLibraryViewModel.swift */; };
+		AA1000162C00000100000001 /* ScoreCanvasView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1000162C00000100000001 /* ScoreCanvasView.swift */; };
+		AA1000172C00000100000001 /* VirtualPianoKeyboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1000172C00000100000001 /* VirtualPianoKeyboardView.swift */; };
+		AA1000182C00000100000001 /* WaterfallNotesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1000182C00000100000001 /* WaterfallNotesView.swift */; };
+		AA1000192C00000100000001 /* PracticeDockView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1000192C00000100000001 /* PracticeDockView.swift */; };
+		AA10001A2C00000100000001 /* PracticeSettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB10001A2C00000100000001 /* PracticeSettingsSheet.swift */; };
+		AA10001B2C00000100000001 /* ScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB10001B2C00000100000001 /* ScannerView.swift */; };
+		AA10001C2C00000100000001 /* SongLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB10001C2C00000100000001 /* SongLibraryView.swift */; };
+		AA10001D2C00000100000001 /* ScorePlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB10001D2C00000100000001 /* ScorePlayerView.swift */; };
+		AA10001E2C00000100000001 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB10001E2C00000100000001 /* SettingsView.swift */; };
+		AA1000212C00000100000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BB1000212C00000100000001 /* Assets.xcassets */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		BB1000002C00000100000001 /* PianoGlass.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PianoGlass.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB1000012C00000100000001 /* PianoGlassApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PianoGlassApp.swift; sourceTree = "<group>"; };
+		BB1000022C00000100000001 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		BB1000032C00000100000001 /* MusicModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicModels.swift; sourceTree = "<group>"; };
+		BB1000042C00000100000001 /* PracticeSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PracticeSession.swift; sourceTree = "<group>"; };
+		BB1000052C00000100000001 /* SongItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SongItem.swift; sourceTree = "<group>"; };
+		BB1000062C00000100000001 /* ScanResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanResult.swift; sourceTree = "<group>"; };
+		BB1000072C00000100000001 /* LiquidGlassTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlassTheme.swift; sourceTree = "<group>"; };
+		BB1000082C00000100000001 /* LiquidGlassModifiers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlassModifiers.swift; sourceTree = "<group>"; };
+		BB1000092C00000100000001 /* GlassComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassComponents.swift; sourceTree = "<group>"; };
+		BB10000A2C00000100000001 /* PianoAudioEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PianoAudioEngine.swift; sourceTree = "<group>"; };
+		BB10000B2C00000100000001 /* AudioScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioScheduler.swift; sourceTree = "<group>"; };
+		BB10000C2C00000100000001 /* VisionStaffDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionStaffDetector.swift; sourceTree = "<group>"; };
+		BB10000D2C00000100000001 /* NoteRecognitionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteRecognitionEngine.swift; sourceTree = "<group>"; };
+		BB10000E2C00000100000001 /* MusicXMLParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicXMLParser.swift; sourceTree = "<group>"; };
+		BB10000F2C00000100000001 /* MusicXMLExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicXMLExporter.swift; sourceTree = "<group>"; };
+		BB1000102C00000100000001 /* MusicScannerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicScannerService.swift; sourceTree = "<group>"; };
+		BB1000112C00000100000001 /* RepertoireService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepertoireService.swift; sourceTree = "<group>"; };
+		BB1000122C00000100000001 /* ScanStorageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanStorageService.swift; sourceTree = "<group>"; };
+		BB1000132C00000100000001 /* ScorePlayerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScorePlayerViewModel.swift; sourceTree = "<group>"; };
+		BB1000142C00000100000001 /* ScannerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScannerViewModel.swift; sourceTree = "<group>"; };
+		BB1000152C00000100000001 /* SongLibraryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SongLibraryViewModel.swift; sourceTree = "<group>"; };
+		BB1000162C00000100000001 /* ScoreCanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Score/ScoreCanvasView.swift"; sourceTree = "<group>"; };
+		BB1000172C00000100000001 /* VirtualPianoKeyboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Keyboard/VirtualPianoKeyboardView.swift"; sourceTree = "<group>"; };
+		BB1000182C00000100000001 /* WaterfallNotesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Keyboard/WaterfallNotesView.swift"; sourceTree = "<group>"; };
+		BB1000192C00000100000001 /* PracticeDockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Practice/PracticeDockView.swift"; sourceTree = "<group>"; };
+		BB10001A2C00000100000001 /* PracticeSettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Practice/PracticeSettingsSheet.swift"; sourceTree = "<group>"; };
+		BB10001B2C00000100000001 /* ScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Scanner/ScannerView.swift"; sourceTree = "<group>"; };
+		BB10001C2C00000100000001 /* SongLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Library/SongLibraryView.swift"; sourceTree = "<group>"; };
+		BB10001D2C00000100000001 /* ScorePlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScorePlayerView.swift; sourceTree = "<group>"; };
+		BB10001E2C00000100000001 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Settings/SettingsView.swift"; sourceTree = "<group>"; };
+		BB1000202C00000100000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		BB1000212C00000100000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		CC1000012C00000100000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		DD1000002C00000100000001 = {
+			isa = PBXGroup;
+			children = (
+				DD1000012C00000100000001 /* Sources */,
+				DD1000082C00000100000001 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		DD1000012C00000100000001 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				DD1000022C00000100000001 /* PianoGlass */,
+			);
+			name = Sources;
+			sourceTree = "<group>";
+		};
+		DD1000022C00000100000001 /* PianoGlass */ = {
+			isa = PBXGroup;
+			children = (
+				DD1000032C00000100000001 /* App */,
+				DD1000042C00000100000001 /* Models */,
+				DD1000052C00000100000001 /* DesignSystem */,
+				DD1000062C00000100000001 /* AudioEngine */,
+				DD1000072C00000100000001 /* OMR */,
+				DD1000092C00000100000001 /* Services */,
+				DD10000A2C00000100000001 /* ViewModels */,
+				DD10000B2C00000100000001 /* Views */,
+				DD10000C2C00000100000001 /* Resources */,
+			);
+			name = PianoGlass;
+			path = Sources/PianoGlass;
+			sourceTree = "<group>";
+		};
+		DD1000032C00000100000001 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				BB1000012C00000100000001 /* PianoGlassApp.swift */,
+				BB1000022C00000100000001 /* ContentView.swift */,
+				BB1000202C00000100000001 /* Info.plist */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		DD1000042C00000100000001 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				BB1000032C00000100000001 /* MusicModels.swift */,
+				BB1000042C00000100000001 /* PracticeSession.swift */,
+				BB1000052C00000100000001 /* SongItem.swift */,
+				BB1000062C00000100000001 /* ScanResult.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		DD1000052C00000100000001 /* DesignSystem */ = {
+			isa = PBXGroup;
+			children = (
+				BB1000072C00000100000001 /* LiquidGlassTheme.swift */,
+				BB1000082C00000100000001 /* LiquidGlassModifiers.swift */,
+				BB1000092C00000100000001 /* GlassComponents.swift */,
+			);
+			path = DesignSystem;
+			sourceTree = "<group>";
+		};
+		DD1000062C00000100000001 /* AudioEngine */ = {
+			isa = PBXGroup;
+			children = (
+				BB10000A2C00000100000001 /* PianoAudioEngine.swift */,
+				BB10000B2C00000100000001 /* AudioScheduler.swift */,
+			);
+			path = AudioEngine;
+			sourceTree = "<group>";
+		};
+		DD1000072C00000100000001 /* OMR */ = {
+			isa = PBXGroup;
+			children = (
+				BB10000C2C00000100000001 /* VisionStaffDetector.swift */,
+				BB10000D2C00000100000001 /* NoteRecognitionEngine.swift */,
+				BB10000E2C00000100000001 /* MusicXMLParser.swift */,
+				BB10000F2C00000100000001 /* MusicXMLExporter.swift */,
+				BB1000102C00000100000001 /* MusicScannerService.swift */,
+			);
+			path = OMR;
+			sourceTree = "<group>";
+		};
+		DD1000092C00000100000001 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				BB1000112C00000100000001 /* RepertoireService.swift */,
+				BB1000122C00000100000001 /* ScanStorageService.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		DD10000A2C00000100000001 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				BB1000132C00000100000001 /* ScorePlayerViewModel.swift */,
+				BB1000142C00000100000001 /* ScannerViewModel.swift */,
+				BB1000152C00000100000001 /* SongLibraryViewModel.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		DD10000B2C00000100000001 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				BB1000162C00000100000001 /* ScoreCanvasView.swift */,
+				BB1000172C00000100000001 /* VirtualPianoKeyboardView.swift */,
+				BB1000182C00000100000001 /* WaterfallNotesView.swift */,
+				BB1000192C00000100000001 /* PracticeDockView.swift */,
+				BB10001A2C00000100000001 /* PracticeSettingsSheet.swift */,
+				BB10001B2C00000100000001 /* ScannerView.swift */,
+				BB10001C2C00000100000001 /* SongLibraryView.swift */,
+				BB10001D2C00000100000001 /* ScorePlayerView.swift */,
+				BB10001E2C00000100000001 /* SettingsView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		DD10000C2C00000100000001 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				BB1000212C00000100000001 /* Assets.xcassets */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		DD1000082C00000100000001 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				BB1000002C00000100000001 /* PianoGlass.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		EE1000012C00000100000001 /* PianoGlass */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FF1000022C00000100000001 /* Build configuration list for PBXNativeTarget "PianoGlass" */;
+			buildPhases = (
+				CC1000022C00000100000001 /* Sources */,
+				CC1000012C00000100000001 /* Frameworks */,
+				CC1000032C00000100000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PianoGlass;
+			productName = PianoGlass;
+			productReference = BB1000002C00000100000001 /* PianoGlass.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		EE1000002C00000100000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastUpgradeCheck = 1520;
+				TargetAttributes = {
+					EE1000012C00000100000001 = {
+						CreatedOnToolsVersion = 15.2;
+					};
+				};
+			};
+			buildConfigurationList = FF1000012C00000100000001 /* Build configuration list for PBXProject "PianoGlass" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = DD1000002C00000100000001;
+			productRefGroup = DD1000082C00000100000001 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				EE1000012C00000100000001 /* PianoGlass */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		CC1000032C00000100000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA1000212C00000100000001 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		CC1000022C00000100000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA1000012C00000100000001 /* PianoGlassApp.swift in Sources */,
+				AA1000022C00000100000001 /* ContentView.swift in Sources */,
+				AA1000032C00000100000001 /* MusicModels.swift in Sources */,
+				AA1000042C00000100000001 /* PracticeSession.swift in Sources */,
+				AA1000052C00000100000001 /* SongItem.swift in Sources */,
+				AA1000062C00000100000001 /* ScanResult.swift in Sources */,
+				AA1000072C00000100000001 /* LiquidGlassTheme.swift in Sources */,
+				AA1000082C00000100000001 /* LiquidGlassModifiers.swift in Sources */,
+				AA1000092C00000100000001 /* GlassComponents.swift in Sources */,
+				AA10000A2C00000100000001 /* PianoAudioEngine.swift in Sources */,
+				AA10000B2C00000100000001 /* AudioScheduler.swift in Sources */,
+				AA10000C2C00000100000001 /* VisionStaffDetector.swift in Sources */,
+				AA10000D2C00000100000001 /* NoteRecognitionEngine.swift in Sources */,
+				AA10000E2C00000100000001 /* MusicXMLParser.swift in Sources */,
+				AA10000F2C00000100000001 /* MusicXMLExporter.swift in Sources */,
+				AA1000102C00000100000001 /* MusicScannerService.swift in Sources */,
+				AA1000112C00000100000001 /* RepertoireService.swift in Sources */,
+				AA1000122C00000100000001 /* ScanStorageService.swift in Sources */,
+				AA1000132C00000100000001 /* ScorePlayerViewModel.swift in Sources */,
+				AA1000142C00000100000001 /* ScannerViewModel.swift in Sources */,
+				AA1000152C00000100000001 /* SongLibraryViewModel.swift in Sources */,
+				AA1000162C00000100000001 /* ScoreCanvasView.swift in Sources */,
+				AA1000172C00000100000001 /* VirtualPianoKeyboardView.swift in Sources */,
+				AA1000182C00000100000001 /* WaterfallNotesView.swift in Sources */,
+				AA1000192C00000100000001 /* PracticeDockView.swift in Sources */,
+				AA10001A2C00000100000001 /* PracticeSettingsSheet.swift in Sources */,
+				AA10001B2C00000100000001 /* ScannerView.swift in Sources */,
+				AA10001C2C00000100000001 /* SongLibraryView.swift in Sources */,
+				AA10001D2C00000100000001 /* ScorePlayerView.swift in Sources */,
+				AA10001E2C00000100000001 /* SettingsView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		GG1000012C00000100000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+		GG1000022C00000100000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		GG1000032C00000100000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 10002;
+				DEVELOPMENT_ASSET_PATHS = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Sources/PianoGlass/App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.2;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pianoglass.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		GG1000042C00000100000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 10002;
+				DEVELOPMENT_ASSET_PATHS = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Sources/PianoGlass/App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.2;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pianoglass.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		FF1000012C00000100000001 /* Build configuration list for PBXProject "PianoGlass" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				GG1000012C00000100000001 /* Debug */,
+				GG1000022C00000100000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		FF1000022C00000100000001 /* Build configuration list for PBXNativeTarget "PianoGlass" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				GG1000032C00000100000001 /* Debug */,
+				GG1000042C00000100000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+	};
+	rootObject = EE1000002C00000100000001 /* Project object */;
+}

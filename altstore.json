@@ -1,27 +1,27 @@
 {
-  "name": "Halbestunde AltStore Source",
-  "identifier": "com.halbestunde.source",
+  "name": "PianoGlass AltStore Source",
+  "identifier": "com.pianoglass.source",
   "subtitle": "Clean minimal iOS sheet music scanner & audio player",
   "description": "Scan printed or digital piano sheet music with Optical Music Recognition (OMR) and listen with pure native iOS audio playback, minimal score preview, and distraction-free design inspired by Feather.",
-  "iconURL": "https://getsentrix.github.io/HalbestundeApp/assets/app-icon.png",
-  "website": "https://getsentrix.github.io/HalbestundeApp",
+  "iconURL": "https://getsentrix.github.io/PianoGlass/assets/app-icon.png",
+  "website": "https://getsentrix.github.io/PianoGlass",
   "apps": [
     {
-      "name": "Halbestunde",
-      "bundleIdentifier": "com.halbestunde.app",
+      "name": "PianoGlass",
+      "bundleIdentifier": "com.pianoglass.app",
       "developerName": "Dylan",
       "version": "1.0.0",
       "versionDate": "2026-09-27T04:00:00Z",
       "versionDescription": "Initial v1.0.0 Release:\n\u2022 Liquid Glass (Glassmorphism) UI with .ultraThinMaterial and specular rim glows\n\u2022 Camera sheet music scanner with Optical Music Recognition (OMR)\n\u2022 Physical modeling polyphonic acoustic grand piano audio engine\n\u2022 Interactive score canvas with synchronized animated playhead\n\u2022 61/88-key lighted virtual piano keyboard with dual-hand color cues\n\u2022 Practice suite: A-B looping, tempo slider (40-240 BPM), transposition, LH/RH isolation\n\u2022 Preloaded classical repertoire (F\u00fcr Elise, Moonlight Sonata, Minuet in G, Chopin Nocturne)",
-      "downloadURL": "https://github.com/getsentrix/HalbestundeApp/releases/download/v1.0.0/HalbestundeApp.ipa",
-      "localizedDescription": "Halbestunde turns sheet music into playable audio with Apple Vision OMR and native audio playback in a distraction-free, minimal iOS interface.",
-      "iconURL": "https://getsentrix.github.io/HalbestundeApp/assets/app-icon.png",
+      "downloadURL": "https://github.com/getsentrix/PianoGlass/releases/download/v1.0.0/PianoGlass.ipa",
+      "localizedDescription": "PianoGlass turns sheet music into playable audio with Apple Vision OMR and native audio playback in a distraction-free, minimal iOS interface.",
+      "iconURL": "https://getsentrix.github.io/PianoGlass/assets/app-icon.png",
       "tintColor": "00E5FF",
-      "size": 714146,
+      "size": 717059,
       "minOSVersion": "17.0",
       "screenshots": [
-        "https://getsentrix.github.io/HalbestundeApp/assets/screenshot-player.png",
-        "https://getsentrix.github.io/HalbestundeApp/assets/screenshot-scanner.png"
+        "https://getsentrix.github.io/PianoGlass/assets/screenshot-player.png",
+        "https://getsentrix.github.io/PianoGlass/assets/screenshot-scanner.png"
       ],
       "appPermissions": {
         "entitlements": [],
@@ -38,7 +38,7 @@
       "caption": "Scan sheet music & practice with Liquid Glass UI",
       "date": "2026-09-27T04:00:00Z",
       "tintColor": "00E5FF",
-      "appID": "com.dylan.halbestunde.app",
+      "appID": "com.pianoglass.app",
       "notify": true
     }
   ]

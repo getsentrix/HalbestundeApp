@@ -4,31 +4,31 @@
 import PackageDescription
 
 let package = Package(
-    name: "HalbestundeApp",
+    name: "PianoGlass",
     platforms: [
         .iOS(.v17),
         .macOS(.v14)
     ],
     products: [
         .library(
-            name: "HalbestundeApp",
-            targets: ["HalbestundeApp"]
+            name: "PianoGlass",
+            targets: ["PianoGlass"]
         ),
     ],
     dependencies: [],
     targets: [
         .target(
-            name: "HalbestundeApp",
+            name: "PianoGlass",
             dependencies: [],
-            path: "Sources/HalbestundeApp",
+            path: "Sources/PianoGlass",
             resources: [
                 .process("Resources")
             ]
         ),
         .testTarget(
-            name: "HalbestundeAppTests",
-            dependencies: ["HalbestundeApp"],
-            path: "Tests/HalbestundeAppTests"
+            name: "PianoGlassTests",
+            dependencies: ["PianoGlass"],
+            path: "Tests/PianoGlassTests"
         ),
     ]
 )

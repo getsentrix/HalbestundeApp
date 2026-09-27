@@ -4,8 +4,8 @@ scripts/bump_version.py
 
 Automates version bumping across:
 - apps.json & docs/apps.json (AltStore / LiveContainer manifest)
-- Sources/HalbestundeApp/App/Info.plist (iOS bundle version)
-- HalbestundeApp.xcodeproj/project.pbxproj (Xcode marketing version)
+- Sources/PianoGlass/App/Info.plist (iOS bundle version)
+- PianoGlass.xcodeproj/project.pbxproj (Xcode marketing version)
 - docs/index.html & index.html (Showcase download button)
 
 Usage:
@@ -108,8 +108,8 @@ def update_html(html_path: str, old_version: str, new_version: str):
         content = f.read()
 
     content = content.replace(
-        f"/releases/download/v{old_version}/HalbestundeApp.ipa",
-        f"/releases/download/v{new_version}/HalbestundeApp.ipa",
+        f"/releases/download/v{old_version}/PianoGlass.ipa",
+        f"/releases/download/v{new_version}/PianoGlass.ipa",
     )
     content = content.replace(
         f"Download .IPA (v{old_version})",
@@ -121,7 +121,7 @@ def update_html(html_path: str, old_version: str, new_version: str):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Halbestunde Version & AltStore Updater")
+    parser = argparse.ArgumentParser(description="PianoGlass Version & AltStore Updater")
     parser.add_argument("--bump", choices=["patch", "minor", "major"], default=None, help="Semver bump type")
     parser.add_argument("--set-version", default=None, help="Set exact version")
     parser.add_argument("--set-size", type=int, default=None, help="Update IPA size in bytes")
@@ -130,8 +130,8 @@ def main():
 
     apps_json_path = os.path.join(REPO_ROOT, "apps.json")
     docs_apps_json_path = os.path.join(REPO_ROOT, "docs", "apps.json")
-    plist_path = os.path.join(REPO_ROOT, "Sources", "HalbestundeApp", "App", "Info.plist")
-    pbxproj_path = os.path.join(REPO_ROOT, "HalbestundeApp.xcodeproj", "project.pbxproj")
+    plist_path = os.path.join(REPO_ROOT, "Sources", "PianoGlass", "App", "Info.plist")
+    pbxproj_path = os.path.join(REPO_ROOT, "PianoGlass.xcodeproj", "project.pbxproj")
     docs_index_path = os.path.join(REPO_ROOT, "docs", "index.html")
     root_index_path = os.path.join(REPO_ROOT, "index.html")
 
@@ -168,7 +168,7 @@ def main():
     # 1. Update apps.json & docs/apps.json
     data["apps"][0]["version"] = new_version
     data["apps"][0]["versionDate"] = now_iso
-    data["apps"][0]["downloadURL"] = f"https://github.com/getsentrix/HalbestundeApp/releases/download/v{new_version}/HalbestundeApp.ipa"
+    data["apps"][0]["downloadURL"] = f"https://github.com/getsentrix/PianoGlass/releases/download/v{new_version}/PianoGlass.ipa"
     if args.set_size is not None:
         data["apps"][0]["size"] = args.set_size
 
@@ -181,9 +181,9 @@ def main():
         flags=re.MULTILINE,
     )
     if "news" in data and len(data["news"]) > 0:
-        data["news"][0]["title"] = f"Halbestunde v{new_version} Available"
+        data["news"][0]["title"] = f"PianoGlass v{new_version} Available"
         data["news"][0]["date"] = now_iso
-        data["news"][0]["identifier"] = f"halbestunde-v{new_version.replace('.', '')}-release"
+        data["news"][0]["identifier"] = f"pianoglass-v{new_version.replace('.', '')}-release"
 
     save_json(apps_json_path, data)
     save_json(docs_apps_json_path, data)

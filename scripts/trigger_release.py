@@ -29,7 +29,7 @@ def run(cmd: list[str]) -> str:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Trigger Halbestunde GitHub Release")
+    parser = argparse.ArgumentParser(description="Trigger PianoGlass GitHub Release")
     parser.add_argument("--bump", choices=["patch", "minor", "major"], default="patch")
     parser.add_argument("--version", default="", help="Specific version override")
     args = parser.parse_args()

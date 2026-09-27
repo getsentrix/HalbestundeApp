@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Generates clean, native, minimal iOS AppIcon for Halbestunde.
+Generates clean, native, minimal iOS AppIcon for PianoGlass.
 Complies with Apple Human Interface Guidelines:
 - Native 1024x1024 master resolution.
 - Opaque 24-bit RGB (no alpha channel, square corners without artificial squircle masks).
@@ -147,10 +147,10 @@ def create_master_icon():
     return master
 
 def main():
-    print("Generating Master 1024x1024 Halbestunde AppIcon...")
+    print("Generating Master 1024x1024 PianoGlass AppIcon...")
     master = create_master_icon()
     
-    catalog_dir = "Sources/HalbestundeApp/Resources/Assets.xcassets/AppIcon.appiconset"
+    catalog_dir = "Sources/PianoGlass/Resources/Assets.xcassets/AppIcon.appiconset"
     os.makedirs(catalog_dir, exist_ok=True)
     
     # Standard clean 18-image specification

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Halbestunde App Verification Suite (Deep Verification)
+PianoGlass App Verification Suite (Deep Verification)
 Validates the mathematical, musical, structural, and algorithmic integrity of the Swift codebase:
 1. Swift structural syntax, imports, protocol conformance, and type signatures.
 2. Pitch & frequency acoustic formulas across full 88-key piano range (A0 to C8).
@@ -23,43 +23,43 @@ def test_swift_code_integrity():
     print("[1/6] Checking Swift code integrity, imports, and protocol conformances...")
     required_files = [
         "Package.swift",
-        "HalbestundeApp.xcodeproj/project.pbxproj",
-        "Sources/HalbestundeApp/App/HalbestundeApp.swift",
-        "Sources/HalbestundeApp/App/ContentView.swift",
-        "Sources/HalbestundeApp/App/Info.plist",
-        "Sources/HalbestundeApp/Models/MusicModels.swift",
-        "Sources/HalbestundeApp/Models/PracticeSession.swift",
-        "Sources/HalbestundeApp/Models/SongItem.swift",
-        "Sources/HalbestundeApp/Models/ScanResult.swift",
-        "Sources/HalbestundeApp/DesignSystem/LiquidGlassTheme.swift",
-        "Sources/HalbestundeApp/DesignSystem/LiquidGlassModifiers.swift",
-        "Sources/HalbestundeApp/DesignSystem/GlassComponents.swift",
-        "Sources/HalbestundeApp/AudioEngine/PianoAudioEngine.swift",
-        "Sources/HalbestundeApp/AudioEngine/AudioScheduler.swift",
-        "Sources/HalbestundeApp/OMR/VisionStaffDetector.swift",
-        "Sources/HalbestundeApp/OMR/NoteRecognitionEngine.swift",
-        "Sources/HalbestundeApp/OMR/MusicXMLParser.swift",
-        "Sources/HalbestundeApp/OMR/MusicXMLExporter.swift",
-        "Sources/HalbestundeApp/OMR/MusicScannerService.swift",
-        "Sources/HalbestundeApp/Services/RepertoireService.swift",
-        "Sources/HalbestundeApp/Services/ScanStorageService.swift",
-        "Sources/HalbestundeApp/ViewModels/ScorePlayerViewModel.swift",
-        "Sources/HalbestundeApp/ViewModels/ScannerViewModel.swift",
-        "Sources/HalbestundeApp/ViewModels/SongLibraryViewModel.swift",
-        "Sources/HalbestundeApp/Views/Score/ScoreCanvasView.swift",
-        "Sources/HalbestundeApp/Views/Keyboard/VirtualPianoKeyboardView.swift",
-        "Sources/HalbestundeApp/Views/Keyboard/WaterfallNotesView.swift",
-        "Sources/HalbestundeApp/Views/Practice/PracticeDockView.swift",
-        "Sources/HalbestundeApp/Views/Practice/PracticeSettingsSheet.swift",
-        "Sources/HalbestundeApp/Views/Scanner/ScannerView.swift",
-        "Sources/HalbestundeApp/Views/Library/SongLibraryView.swift",
-        "Sources/HalbestundeApp/Views/ScorePlayerView.swift",
-        "Sources/HalbestundeApp/Views/Settings/SettingsView.swift",
-        "Tests/HalbestundeAppTests/ScoreModelTests.swift",
-        "Tests/HalbestundeAppTests/MusicXMLParserTests.swift",
-        "Tests/HalbestundeAppTests/PracticeControlsTests.swift",
-        "Tests/HalbestundeAppTests/OMRStaffDetectorTests.swift",
-        "Tests/HalbestundeAppTests/AudioSchedulerTests.swift",
+        "PianoGlass.xcodeproj/project.pbxproj",
+        "Sources/PianoGlass/App/PianoGlassApp.swift",
+        "Sources/PianoGlass/App/ContentView.swift",
+        "Sources/PianoGlass/App/Info.plist",
+        "Sources/PianoGlass/Models/MusicModels.swift",
+        "Sources/PianoGlass/Models/PracticeSession.swift",
+        "Sources/PianoGlass/Models/SongItem.swift",
+        "Sources/PianoGlass/Models/ScanResult.swift",
+        "Sources/PianoGlass/DesignSystem/LiquidGlassTheme.swift",
+        "Sources/PianoGlass/DesignSystem/LiquidGlassModifiers.swift",
+        "Sources/PianoGlass/DesignSystem/GlassComponents.swift",
+        "Sources/PianoGlass/AudioEngine/PianoAudioEngine.swift",
+        "Sources/PianoGlass/AudioEngine/AudioScheduler.swift",
+        "Sources/PianoGlass/OMR/VisionStaffDetector.swift",
+        "Sources/PianoGlass/OMR/NoteRecognitionEngine.swift",
+        "Sources/PianoGlass/OMR/MusicXMLParser.swift",
+        "Sources/PianoGlass/OMR/MusicXMLExporter.swift",
+        "Sources/PianoGlass/OMR/MusicScannerService.swift",
+        "Sources/PianoGlass/Services/RepertoireService.swift",
+        "Sources/PianoGlass/Services/ScanStorageService.swift",
+        "Sources/PianoGlass/ViewModels/ScorePlayerViewModel.swift",
+        "Sources/PianoGlass/ViewModels/ScannerViewModel.swift",
+        "Sources/PianoGlass/ViewModels/SongLibraryViewModel.swift",
+        "Sources/PianoGlass/Views/Score/ScoreCanvasView.swift",
+        "Sources/PianoGlass/Views/Keyboard/VirtualPianoKeyboardView.swift",
+        "Sources/PianoGlass/Views/Keyboard/WaterfallNotesView.swift",
+        "Sources/PianoGlass/Views/Practice/PracticeDockView.swift",
+        "Sources/PianoGlass/Views/Practice/PracticeSettingsSheet.swift",
+        "Sources/PianoGlass/Views/Scanner/ScannerView.swift",
+        "Sources/PianoGlass/Views/Library/SongLibraryView.swift",
+        "Sources/PianoGlass/Views/ScorePlayerView.swift",
+        "Sources/PianoGlass/Views/Settings/SettingsView.swift",
+        "Tests/PianoGlassTests/ScoreModelTests.swift",
+        "Tests/PianoGlassTests/MusicXMLParserTests.swift",
+        "Tests/PianoGlassTests/PracticeControlsTests.swift",
+        "Tests/PianoGlassTests/OMRStaffDetectorTests.swift",
+        "Tests/PianoGlassTests/AudioSchedulerTests.swift",
     ]
 
     for path in required_files:
@@ -73,20 +73,20 @@ def test_swift_code_integrity():
                 assert opens == closes, f"Unbalanced braces in {path}: {opens} vs {closes}"
 
     # Verify specific critical Swift imports and declarations
-    with open("Sources/HalbestundeApp/AudioEngine/PianoAudioEngine.swift", "r", encoding="utf-8") as f:
+    with open("Sources/PianoGlass/AudioEngine/PianoAudioEngine.swift", "r", encoding="utf-8") as f:
         pae = f.read()
         assert "import os" in pae, "PianoAudioEngine must import os for os_unfair_lock"
 
-    with open("Sources/HalbestundeApp/AudioEngine/AudioScheduler.swift", "r", encoding="utf-8") as f:
+    with open("Sources/PianoGlass/AudioEngine/AudioScheduler.swift", "r", encoding="utf-8") as f:
         sched = f.read()
         assert "import QuartzCore" in sched, "AudioScheduler must import QuartzCore for CACurrentMediaTime"
 
-    with open("Sources/HalbestundeApp/Models/MusicModels.swift", "r", encoding="utf-8") as f:
+    with open("Sources/PianoGlass/Models/MusicModels.swift", "r", encoding="utf-8") as f:
         models = f.read()
         assert "struct Score: Identifiable, Codable, Equatable" in models, "Score must conform to Equatable"
         assert "struct Measure: Identifiable, Codable, Equatable" in models, "Measure must conform to Equatable"
 
-    with open("Sources/HalbestundeApp/Models/ScanResult.swift", "r", encoding="utf-8") as f:
+    with open("Sources/PianoGlass/Models/ScanResult.swift", "r", encoding="utf-8") as f:
         scan_res = f.read()
         assert "trebleStaffLines" in scan_res and "bassStaffLines" in scan_res, "RecognizedStaffSystem must store staff lines"
 
@@ -291,7 +291,7 @@ def test_transposition_and_practice_controls():
 
 def test_scan_and_import_pipeline():
     print("[7/7] Testing scan, document import, fallback synthesis, and storage pipeline...")
-    with open("Sources/HalbestundeApp/ViewModels/ScannerViewModel.swift", "r", encoding="utf-8") as f:
+    with open("Sources/PianoGlass/ViewModels/ScannerViewModel.swift", "r", encoding="utf-8") as f:
         vm_code = f.read()
     assert "public var onScoreAccepted: ((Score) -> Void)?" in vm_code, "ScannerViewModel must have onScoreAccepted transition callback"
     assert "func processImportedFile(at url: URL)" in vm_code, "ScannerViewModel must handle file imports"
@@ -300,32 +300,32 @@ def test_scan_and_import_pipeline():
     assert "progressFraction" in vm_code, "ScannerViewModel must provide progress feedback"
     assert "func reset()" in vm_code, "ScannerViewModel must support reset"
     
-    with open("Sources/HalbestundeApp/Views/Scanner/ScannerView.swift", "r", encoding="utf-8") as f:
+    with open("Sources/PianoGlass/Views/Scanner/ScannerView.swift", "r", encoding="utf-8") as f:
         scan_code = f.read()
     assert "fileImporter" in scan_code, "ScannerView must offer file importer for MusicXML and images"
     assert "normalizedCGImage" in scan_code, "ScannerView must normalize image orientations"
     assert "Scan Sheet Music" in scan_code, "ScannerView must provide Scan Sheet Music button"
     assert "Import from Photos" in scan_code, "ScannerView must provide Photos import button"
     
-    with open("Sources/HalbestundeApp/ViewModels/SongLibraryViewModel.swift", "r", encoding="utf-8") as f:
+    with open("Sources/PianoGlass/ViewModels/SongLibraryViewModel.swift", "r", encoding="utf-8") as f:
         lib_vm_code = f.read()
     assert "func importFile(at url: URL, completion:" in lib_vm_code, "SongLibraryViewModel must have retained importFile method"
     assert "activeImportScanner" in lib_vm_code, "SongLibraryViewModel must retain activeImportScanner to avoid deallocation"
     assert "isImporting" in lib_vm_code, "SongLibraryViewModel must track isImporting"
     
-    with open("Sources/HalbestundeApp/Views/Library/SongLibraryView.swift", "r", encoding="utf-8") as f:
+    with open("Sources/PianoGlass/Views/Library/SongLibraryView.swift", "r", encoding="utf-8") as f:
         lib_code = f.read()
     assert "fileImporter" in lib_code, "SongLibraryView must offer direct file import"
     assert "showScannerSheet" in lib_code, "SongLibraryView must support scanning sheet"
     assert "viewModel.importFile" in lib_code, "SongLibraryView must call viewModel.importFile"
     assert "viewModel.isImporting" in lib_code, "SongLibraryView must display live importing banner"
     
-    with open("Sources/HalbestundeApp/Services/ScanStorageService.swift", "r", encoding="utf-8") as f:
+    with open("Sources/PianoGlass/Services/ScanStorageService.swift", "r", encoding="utf-8") as f:
         storage_code = f.read()
     assert "func saveScore(" in storage_code, "ScanStorageService must have saveScore convenience method"
     assert "func loadScannedSongs()" in storage_code, "ScanStorageService must load scanned songs"
     
-    with open("Sources/HalbestundeApp/OMR/NoteRecognitionEngine.swift", "r", encoding="utf-8") as f:
+    with open("Sources/PianoGlass/OMR/NoteRecognitionEngine.swift", "r", encoding="utf-8") as f:
         engine_code = f.read()
     assert "synthesizeFallbackMeasures" in engine_code, "NoteRecognitionEngine must synthesize fallback measures"
     

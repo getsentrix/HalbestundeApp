@@ -13,7 +13,7 @@ from PIL import Image
 
 def test_app_icon():
     print("[Test 1/3] Validating AppIcon Catalog & Resolutions...")
-    catalog_path = "Sources/HalbestundeApp/Resources/Assets.xcassets/AppIcon.appiconset"
+    catalog_path = "Sources/PianoGlass/Resources/Assets.xcassets/AppIcon.appiconset"
     contents_file = os.path.join(catalog_path, "Contents.json")
     assert os.path.exists(contents_file), "Contents.json missing"
     
@@ -52,7 +52,7 @@ def test_app_icon():
 
 def test_project_and_plist():
     print("[Test 2/3] Validating project.pbxproj & Info.plist icon integration...")
-    pbx_path = "HalbestundeApp.xcodeproj/project.pbxproj"
+    pbx_path = "PianoGlass.xcodeproj/project.pbxproj"
     with open(pbx_path, "r", encoding="utf-8") as f:
         pbx = f.read()
         
@@ -60,7 +60,7 @@ def test_project_and_plist():
     assert "Assets.xcassets */ = {isa = PBXFileReference" in pbx, "Assets.xcassets PBXFileReference missing"
     assert "ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;" in pbx, "ASSETCATALOG_COMPILER_APPICON_NAME setting missing"
     
-    plist_path = "Sources/HalbestundeApp/App/Info.plist"
+    plist_path = "Sources/PianoGlass/App/Info.plist"
     with open(plist_path, "rb") as f:
         pl = plistlib.load(f)
         
@@ -73,7 +73,7 @@ def test_ui_components():
     print("[Test 3/3] Validating Feather-inspired minimal UI components...")
     
     # 1. ScorePlayerView
-    player_path = "Sources/HalbestundeApp/Views/ScorePlayerView.swift"
+    player_path = "Sources/PianoGlass/Views/ScorePlayerView.swift"
     with open(player_path, "r", encoding="utf-8") as f:
         player_code = f.read()
         
@@ -87,7 +87,7 @@ def test_ui_components():
     assert "formattedCurrentTime" in player_code, "Elapsed time timestamp must be present"
     
     # 2. ScannerView
-    scanner_path = "Sources/HalbestundeApp/Views/Scanner/ScannerView.swift"
+    scanner_path = "Sources/PianoGlass/Views/Scanner/ScannerView.swift"
     with open(scanner_path, "r", encoding="utf-8") as f:
         scanner_code = f.read()
         
@@ -96,7 +96,7 @@ def test_ui_components():
     assert "ScanReviewSheet" in scanner_code, "ScanReviewSheet must be present"
     
     # 3. SongLibraryView
-    lib_path = "Sources/HalbestundeApp/Views/Library/SongLibraryView.swift"
+    lib_path = "Sources/PianoGlass/Views/Library/SongLibraryView.swift"
     with open(lib_path, "r", encoding="utf-8") as f:
         lib_code = f.read()
         
@@ -104,14 +104,14 @@ def test_ui_components():
     assert "showScannerSheet" in lib_code, "SongLibraryView must support launching scanner sheet from toolbar"
     
     # 4. SettingsView
-    settings_path = "Sources/HalbestundeApp/Views/Settings/SettingsView.swift"
+    settings_path = "Sources/PianoGlass/Views/Settings/SettingsView.swift"
     with open(settings_path, "r", encoding="utf-8") as f:
         settings_code = f.read()
         
     assert "listStyle(.insetGrouped)" in settings_code, "SettingsView must use insetGrouped list styling"
     
     # 5. ContentView
-    content_path = "Sources/HalbestundeApp/App/ContentView.swift"
+    content_path = "Sources/PianoGlass/App/ContentView.swift"
     with open(content_path, "r", encoding="utf-8") as f:
         content_code = f.read()
         

@@ -1,6 +1,6 @@
-# Halbestunde iOS • Liquid Glass Piano Sheet Music Scanner & Player
+# PianoGlass iOS • Liquid Glass Piano Sheet Music Scanner & Player
 
-A pure native Swift & SwiftUI iOS application inspired by **Halbestunde**. Scan printed or digital piano sheet music, immediately recognize the musical notation with an Optical Music Recognition (OMR) pipeline, and play along with real-time polyphonic piano audio, an interactive vector score with animated glowing playhead, and an illuminated 61/88-key virtual piano keyboard.
+A pure native Swift & SwiftUI iOS application. Scan printed or digital piano sheet music, immediately recognize the musical notation with an Optical Music Recognition (OMR) pipeline, and play along with real-time polyphonic piano audio, an interactive vector score with animated glowing playhead, and an illuminated 61/88-key virtual piano keyboard.
 
 All styled in a luxury dark concert-hall **Liquid Glass (Glassmorphism)** design system with frosted `.ultraThinMaterial` blurs, glowing specular rim gradients, and iridescent accents.
 
@@ -67,11 +67,11 @@ All styled in a luxury dark concert-hall **Liquid Glass (Glassmorphism)** design
 
 ```
 ├── Package.swift                             # Swift Package Manager manifest
-├── HalbestundeApp.xcodeproj/                 # Xcode project for iOS 17+
+├── PianoGlass.xcodeproj/                 # Xcode project for iOS 17+
 │   └── project.pbxproj
-├── Sources/HalbestundeApp/
+├── Sources/PianoGlass/
 │   ├── App/
-│   │   ├── HalbestundeApp.swift              # App entry point (@main)
+│   │   ├── PianoGlassApp.swift              # App entry point (@main)
 │   │   ├── ContentView.swift                 # Main tab navigation
 │   │   └── Info.plist                        # Camera & background audio permissions
 │   ├── Models/
@@ -113,7 +113,7 @@ All styled in a luxury dark concert-hall **Liquid Glass (Glassmorphism)** design
 │   │   └── ScorePlayerView.swift             # Master player layout
 │   └── Resources/
 │       └── fur_elise.musicxml                # Sample MusicXML sheet music
-├── Tests/HalbestundeAppTests/
+├── Tests/PianoGlassTests/
 │   ├── ScoreModelTests.swift                 # Unit tests for Pitch, Frequency, Score
 │   ├── MusicXMLParserTests.swift             # Unit tests for XML parsing & roundtrip
 │   ├── PracticeControlsTests.swift           # Unit tests for Hand isolation & looping
@@ -129,7 +129,7 @@ All styled in a luxury dark concert-hall **Liquid Glass (Glassmorphism)** design
 ## How to Build and Run
 
 ### Option 1: Xcode (macOS)
-1. Open `HalbestundeApp.xcodeproj` in Xcode 15 or later.
+1. Open `PianoGlass.xcodeproj` in Xcode 15 or later.
 2. Select an iOS 17+ Simulator (e.g. *iPhone 15 Pro*) or your connected physical iPhone / iPad.
 3. Press **Cmd + R** to build and run.
 

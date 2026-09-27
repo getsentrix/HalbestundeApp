@@ -1,44 +1,44 @@
 {
-  "name": "Halbestunde AltStore Source",
-  "identifier": "com.halbestunde.source",
+  "name": "PianoGlass AltStore Source",
+  "identifier": "com.pianoglass.source",
   "subtitle": "Clean minimal iOS sheet music scanner & audio player",
   "description": "Scan printed or digital piano sheet music with Optical Music Recognition (OMR) and listen with pure native iOS audio playback, minimal score preview, and distraction-free design inspired by Feather.",
-  "iconURL": "https://getsentrix.github.io/HalbestundeApp/assets/app-icon.png",
-  "website": "https://getsentrix.github.io/HalbestundeApp",
+  "iconURL": "https://getsentrix.github.io/PianoGlass/assets/app-icon.png",
+  "website": "https://getsentrix.github.io/PianoGlass",
   "apps": [
     {
-      "name": "Halbestunde",
-      "bundleIdentifier": "com.halbestunde.app",
+      "name": "PianoGlass",
+      "bundleIdentifier": "com.pianoglass.app",
       "developerName": "Dylan",
       "version": "1.0.2",
       "versionDate": "2026-09-27T05:11:33Z",
       "versionDescription": "Release v1.0.2:\n\u2022 Sheet music scanner with camera capture and photo import\n\u2022 On-device acoustic grand piano audio engine\n\u2022 Minimal player with scrub bar, tempo slider, and looping\n\u2022 Score library with secure local storage",
-      "downloadURL": "https://github.com/getsentrix/HalbestundeApp/releases/download/v1.0.2/HalbestundeApp.ipa",
-      "localizedDescription": "Halbestunde turns sheet music into playable audio with Apple Vision OMR and native audio playback in a distraction-free, minimal iOS interface.",
-      "iconURL": "https://getsentrix.github.io/HalbestundeApp/assets/app-icon.png",
+      "downloadURL": "https://github.com/getsentrix/PianoGlass/releases/download/v1.0.2/PianoGlass.ipa",
+      "localizedDescription": "PianoGlass turns sheet music into playable audio with Apple Vision OMR and native audio playback in a distraction-free, minimal iOS interface.",
+      "iconURL": "https://getsentrix.github.io/PianoGlass/assets/app-icon.png",
       "tintColor": "00E5FF",
-      "size": 760888,
+      "size": 717059,
       "minOSVersion": "17.0",
       "screenshots": [
-        "https://getsentrix.github.io/HalbestundeApp/assets/screenshot-player.png",
-        "https://getsentrix.github.io/HalbestundeApp/assets/screenshot-scanner.png"
+        "https://getsentrix.github.io/PianoGlass/assets/screenshot-player.png",
+        "https://getsentrix.github.io/PianoGlass/assets/screenshot-scanner.png"
       ],
       "appPermissions": {
         "entitlements": [],
         "privacy": {
-          "NSCameraUsageDescription": "Halbestunde requires camera access to scan sheet music."
+          "NSCameraUsageDescription": "PianoGlass requires camera access to scan sheet music."
         }
       }
     }
   ],
   "news": [
     {
-      "title": "Halbestunde v1.0.2 Available",
-      "identifier": "halbestunde-v102-release",
+      "title": "PianoGlass v1.0.2 Available",
+      "identifier": "pianoglass-v102-release",
       "caption": "Scan sheet music with minimal native iOS UI",
       "date": "2026-09-27T05:11:33Z",
       "tintColor": "00E5FF",
-      "appID": "com.halbestunde.app",
+      "appID": "com.pianoglass.app",
       "notify": true
     }
   ]
