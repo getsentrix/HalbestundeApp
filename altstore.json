@@ -1,0 +1,45 @@
+{
+  "name": "PianoGlass AltStore Source",
+  "identifier": "com.dylan.pianoglass.source",
+  "subtitle": "Halbestunde-style piano sheet music scanner & interactive player",
+  "description": "Scan printed or digital piano sheet music, recognize notation with Optical Music Recognition (OMR), and play along with real-time polyphonic piano audio, animated score, illuminated keyboard, and practice tools enclosed in a Liquid Glass UI.",
+  "iconURL": "https://getsentrix.github.io/HalbestundeApp/assets/app-icon.png",
+  "website": "https://getsentrix.github.io/HalbestundeApp",
+  "apps": [
+    {
+      "name": "PianoGlass",
+      "bundleIdentifier": "com.dylan.halbestunde.app",
+      "developerName": "Dylan",
+      "version": "1.0.0",
+      "versionDate": "2026-09-27T04:00:00Z",
+      "versionDescription": "Initial v1.0.0 Release:\n• Liquid Glass (Glassmorphism) UI with .ultraThinMaterial and specular rim glows\n• Camera sheet music scanner with Optical Music Recognition (OMR)\n• Physical modeling polyphonic acoustic grand piano audio engine\n• Interactive score canvas with synchronized animated playhead\n• 61/88-key lighted virtual piano keyboard with dual-hand color cues\n• Practice suite: A-B looping, tempo slider (40-240 BPM), transposition, LH/RH isolation\n• Preloaded classical repertoire (Für Elise, Moonlight Sonata, Minuet in G, Chopin Nocturne)",
+      "downloadURL": "https://github.com/getsentrix/HalbestundeApp/releases/download/v1.0.0/HalbestundeApp.ipa",
+      "localizedDescription": "PianoGlass turns your sheet music into an interactive piano coach. Snap a photo of any piano sheet music to immediately hear it played, follow along note-by-note on an illuminated virtual keyboard, slow down the tempo, isolate left or right hand, and loop difficult passages.",
+      "iconURL": "https://getsentrix.github.io/HalbestundeApp/assets/app-icon.png",
+      "tintColor": "00E5FF",
+      "size": 541770,
+      "minOSVersion": "17.0",
+      "screenshots": [
+        "https://getsentrix.github.io/HalbestundeApp/assets/screenshot-player.png",
+        "https://getsentrix.github.io/HalbestundeApp/assets/screenshot-scanner.png"
+      ],
+      "appPermissions": {
+        "entitlements": [],
+        "privacy": {
+          "NSCameraUsageDescription": "PianoGlass requires camera access to scan piano sheet music."
+        }
+      }
+    }
+  ],
+  "news": [
+    {
+      "title": "PianoGlass v1.0.0 is Live!",
+      "identifier": "pianoglass-v100-announcement",
+      "caption": "Scan sheet music & practice with Liquid Glass UI",
+      "date": "2026-09-27T04:00:00Z",
+      "tintColor": "00E5FF",
+      "appID": "com.dylan.halbestunde.app",
+      "notify": true
+    }
+  ]
+}
