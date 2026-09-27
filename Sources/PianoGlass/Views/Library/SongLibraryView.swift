@@ -276,10 +276,17 @@ private struct SongListRow: View {
             Spacer()
             
             // Play Button
-            Button(action: onPlay) {
+            Button(action: {
+                #if canImport(UIKit)
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                #endif
+                onPlay()
+            }) {
                 Image(systemName: "play.circle.fill")
-                    .font(.system(size: 28))
+                    .font(.system(size: 30))
                     .foregroundColor(.accentColor)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
         }

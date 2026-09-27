@@ -227,4 +227,83 @@ final class MusicXMLParserTests: XCTestCase {
         waitForExpectations(timeout: 2.0)
         try? FileManager.default.removeItem(at: tempURL)
     }
+    
+    func testTiedNotesParsing() {
+        let tiedXML = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <score-partwise version="3.1">
+          <part id="P1">
+            <measure number="1">
+              <attributes>
+                <divisions>4</divisions>
+                <time><beats>4</beats><beat-type>4</beat-type></time>
+                <staves>1</staves>
+              </attributes>
+              <note>
+                <pitch><step>C</step><octave>4</octave></pitch>
+                <duration>16</duration>
+                <tie type="start"/>
+                <staff>1</staff>
+              </note>
+            </measure>
+            <measure number="2">
+              <note>
+                <pitch><step>C</step><octave>4</octave></pitch>
+                <duration>4</duration>
+                <tie type="stop"/>
+                <staff>1</staff>
+              </note>
+            </measure>
+          </part>
+        </score-partwise>
+        """
+        let parser = MusicXMLParser()
+        let score = parser.parse(xmlString: tiedXML)
+        XCTAssertNotNil(score)
+        XCTAssertEqual(score?.measures.count, 2)
+        
+        let m1Notes = score?.measures[0].notes ?? []
+        let m2Notes = score?.measures[1].notes ?? []
+        
+        XCTAssertEqual(m1Notes.count, 1)
+        XCTAssertFalse(m1Notes[0].isTiedContinuation, "First note should not be tied continuation")
+        
+        XCTAssertEqual(m2Notes.count, 1)
+        XCTAssertTrue(m2Notes[0].isTiedContinuation, "Second note must be marked as tied continuation")
+        XCTAssertEqual(m2Notes[0].pitch.midiNumber, 60)
+    }
+    
+    func testNoteDurationTypeFallback() {
+        let fallbackTypeXML = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <score-partwise version="3.1">
+          <part id="P1">
+            <measure number="1">
+              <attributes>
+                <divisions>4</divisions>
+                <time><beats>4</beats><beat-type>4</beat-type></time>
+                <staves>1</staves>
+              </attributes>
+              <note>
+                <pitch><step>G</step><octave>4</octave></pitch>
+                <type>quarter</type>
+                <staff>1</staff>
+              </note>
+              <note>
+                <pitch><step>E</step><octave>4</octave></pitch>
+                <type>half</type>
+                <staff>1</staff>
+              </note>
+            </measure>
+          </part>
+        </score-partwise>
+        """
+        let parser = MusicXMLParser()
+        let score = parser.parse(xmlString: fallbackTypeXML)
+        XCTAssertNotNil(score)
+        let notes = score?.measures.first?.notes ?? []
+        XCTAssertEqual(notes.count, 2)
+        XCTAssertEqual(notes[0].durationBeats, 1.0, "Quarter note fallback should equal 1.0 beat")
+        XCTAssertEqual(notes[1].durationBeats, 2.0, "Half note fallback should equal 2.0 beats")
+    }
 }

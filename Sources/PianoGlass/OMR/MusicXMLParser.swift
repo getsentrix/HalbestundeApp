@@ -34,6 +34,9 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
     private var inNote: Bool = false
     private var isChordNote: Bool = false
     private var isRestNote: Bool = false
+    private var isTieStart: Bool = false
+    private var isTieStop: Bool = false
+    private var currentNoteType: String = ""
     private var currentStep: String = "C"
     private var currentOctave: Int = 4
     private var currentAlter: Int = 0
@@ -41,6 +44,7 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
     private var currentStaffNumber: Int = 1
     private var currentVoice: Int = 1
     private var lastNoteStartTicks: Int = 0
+    private var lastStaffNoteStartTicks: [Int: Int] = [:]
     
     public override init() {
         super.init()
@@ -95,6 +99,7 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
             currentMeasureNotes = []
             globalMeasureTicks = 0
             staffTickCursors = [1: 0, 2: 0]
+            lastStaffNoteStartTicks = [1: 0, 2: 0]
             lastNoteStartTicks = 0
             if let numStr = attributeDict["number"], let num = Int(numStr) {
                 currentMeasureIndex = max(0, num - 1)
@@ -103,6 +108,9 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
             inNote = true
             isChordNote = false
             isRestNote = false
+            isTieStart = false
+            isTieStop = false
+            currentNoteType = ""
             currentStep = "C"
             currentOctave = 4
             currentAlter = 0
@@ -113,6 +121,11 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
             isChordNote = true
         } else if elementName == "rest" {
             isRestNote = true
+        } else if elementName == "tie" || elementName == "tied" {
+            if let type = attributeDict["type"] {
+                if type == "start" { isTieStart = true }
+                else if type == "stop" { isTieStop = true }
+            }
         } else if elementName == "backup" {
             inBackup = true
             backupForwardTicks = 0
@@ -155,6 +168,8 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
             if !currentText.isEmpty {
                 keySignature = KeySignature(fifths: keySignature.fifths, mode: currentText)
             }
+        case "type":
+            currentNoteType = currentText.lowercased()
         case "step":
             currentStep = currentText.uppercased()
         case "octave":
@@ -179,6 +194,10 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
             for (st, cur) in staffTickCursors {
                 staffTickCursors[st] = max(0, cur - backupForwardTicks)
             }
+            for (st, cur) in lastStaffNoteStartTicks {
+                lastStaffNoteStartTicks[st] = max(0, cur - backupForwardTicks)
+            }
+            lastNoteStartTicks = max(0, lastNoteStartTicks - backupForwardTicks)
             inBackup = false
             
         case "forward":
@@ -186,10 +205,31 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
             for (st, cur) in staffTickCursors {
                 staffTickCursors[st] = cur + backupForwardTicks
             }
+            for (st, cur) in lastStaffNoteStartTicks {
+                lastStaffNoteStartTicks[st] = cur + backupForwardTicks
+            }
+            lastNoteStartTicks += backupForwardTicks
             inForward = false
             
         case "note":
-            let durationBeats = max(0.125, Double(currentDurationTicks) / Double(max(1, divisions)))
+            var effectiveTicks = currentDurationTicks
+            if effectiveTicks <= 0 && !currentNoteType.isEmpty {
+                let div = max(1, divisions)
+                switch currentNoteType {
+                case "whole": effectiveTicks = div * 4
+                case "half": effectiveTicks = div * 2
+                case "quarter": effectiveTicks = div
+                case "eighth": effectiveTicks = max(1, div / 2)
+                case "16th", "sixteenth": effectiveTicks = max(1, div / 4)
+                case "32nd": effectiveTicks = max(1, div / 8)
+                default: effectiveTicks = div
+                }
+            }
+            if effectiveTicks <= 0 {
+                effectiveTicks = max(1, divisions)
+            }
+            
+            let durationBeats = max(0.125, Double(effectiveTicks) / Double(max(1, divisions)))
             let hand: Hand = (currentStaffNumber >= 2) ? .left : .right
             let accidental: Accidental?
             if currentAlter == 1 { accidental = .sharp }
@@ -200,16 +240,17 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
             
             let pitch = Pitch(name: currentStep, octave: currentOctave, accidental: accidental ?? .natural)
             
-            // Calculate start tick: if chord, same as previous note; else staff cursor
+            // Calculate start tick: if chord, same as previous note on this staff; else staff cursor
             let noteStartTick: Int
             if isChordNote {
-                noteStartTick = lastNoteStartTicks
+                noteStartTick = lastStaffNoteStartTicks[currentStaffNumber] ?? lastNoteStartTicks
             } else {
                 let staffCursor = staffTickCursors[currentStaffNumber] ?? 0
                 noteStartTick = staffCursor
+                lastStaffNoteStartTicks[currentStaffNumber] = noteStartTick
                 lastNoteStartTicks = noteStartTick
-                staffTickCursors[currentStaffNumber] = staffCursor + currentDurationTicks
-                globalMeasureTicks = max(globalMeasureTicks, staffCursor + currentDurationTicks)
+                staffTickCursors[currentStaffNumber] = staffCursor + effectiveTicks
+                globalMeasureTicks = max(globalMeasureTicks, staffCursor + effectiveTicks)
             }
             
             let noteStartBeatWithinMeasure = Double(noteStartTick) / Double(max(1, divisions))
@@ -222,22 +263,35 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
                 hand: hand,
                 measureIndex: currentMeasureIndex,
                 isRest: isRestNote,
-                accidental: accidental
+                accidental: accidental,
+                isTiedContinuation: isTieStop
             )
             currentMeasureNotes.append(note)
             inNote = false
             
         case "measure":
+            let measureDuration: Double
+            if measures.isEmpty && !currentMeasureNotes.isEmpty {
+                let maxEnd = currentMeasureNotes.map { ($0.startBeat - currentMeasureBeatStart) + $0.durationBeats }.max() ?? timeSignature.beatsPerMeasure
+                if maxEnd < timeSignature.beatsPerMeasure && maxEnd > 0 {
+                    measureDuration = maxEnd
+                } else {
+                    measureDuration = timeSignature.beatsPerMeasure
+                }
+            } else {
+                measureDuration = timeSignature.beatsPerMeasure
+            }
+            
             let measure = Measure(
                 index: currentMeasureIndex,
                 startBeat: currentMeasureBeatStart,
-                durationBeats: timeSignature.beatsPerMeasure,
+                durationBeats: measureDuration,
                 timeSignature: timeSignature,
                 keySignature: keySignature,
                 notes: currentMeasureNotes.sorted(by: { $0.startBeat < $1.startBeat })
             )
             measures.append(measure)
-            currentMeasureBeatStart += timeSignature.beatsPerMeasure
+            currentMeasureBeatStart += measureDuration
             currentMeasureIndex += 1
             
         default:

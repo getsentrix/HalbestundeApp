@@ -201,10 +201,12 @@ public final class AudioScheduler: ObservableObject {
                         // Check if hand is allowed to play sound
                         if practiceSettings.shouldPlay(hand: note.hand) {
                             if !activeSoundingNoteIds.contains(note.id) {
-                                // Clean re-trigger of note (even if pitch was previously sounding)
-                                audioEngine.noteOff(pitch: finalPitch)
-                                let handVol = practiceSettings.volume(for: note.hand)
-                                audioEngine.noteOn(pitch: finalPitch, velocity: note.velocity * handVol)
+                                if !note.isTiedContinuation {
+                                    // Clean re-trigger of note (even if pitch was previously sounding)
+                                    audioEngine.noteOff(pitch: finalPitch)
+                                    let handVol = practiceSettings.volume(for: note.hand)
+                                    audioEngine.noteOn(pitch: finalPitch, velocity: note.velocity * handVol)
+                                }
                                 activeSoundingNoteIds.insert(note.id)
                                 activeSoundingPitchMap[note.id] = finalPitch
                             }
@@ -227,8 +229,13 @@ public final class AudioScheduler: ObservableObject {
         }
         
         DispatchQueue.main.async { [weak self] in
-            self?.activePitches = newlyActivePitches
-            self?.activeNoteEventIds = activeIds
+            guard let self = self else { return }
+            if self.activePitches != newlyActivePitches {
+                self.activePitches = newlyActivePitches
+            }
+            if self.activeNoteEventIds != activeIds {
+                self.activeNoteEventIds = activeIds
+            }
         }
     }
     

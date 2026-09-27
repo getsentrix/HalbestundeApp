@@ -82,74 +82,84 @@ public final class PianoAudioEngine: ObservableObject {
             let samplePeriod = 1.0 / self.sampleRate
             
             os_unfair_lock_lock(self.voiceLock)
-            var voicesToRemove = [Int]()
+            var voices = Array(self.activeVoices.values)
+            let voiceCount = voices.count
+            var voicesToRemove = Set<Int>()
+            let twoPi = 2.0 * Double.pi
             
             for frame in 0..<Int(frameCount) {
                 var mixedSample: Float = 0.0
                 
-                // Synthesize active piano voices
-                for (pitch, var voice) in self.activeVoices {
-                    voice.ageSeconds += samplePeriod
-                    let freq = voice.frequency
+                // Synthesize active piano voices from local array
+                for i in 0..<voiceCount {
+                    voices[i].ageSeconds += samplePeriod
+                    let freq = voices[i].frequency
+                    let pitch = voices[i].pitch
                     
                     // Inharmonicity detuning characteristic of piano strings
                     let inharmonicFactor = 1.0 + 0.0001 * pow(freq / 440.0, 1.8)
-                    let baseStep = 2.0 * Double.pi * freq * samplePeriod
-                    let detunedStep = 2.0 * Double.pi * (freq * 1.0008) * samplePeriod
-                    let harmonicStep = 2.0 * Double.pi * (freq * 2.0 * inharmonicFactor) * samplePeriod
+                    let baseStep = twoPi * freq * samplePeriod
+                    let detunedStep = twoPi * (freq * 1.0008) * samplePeriod
+                    let harmonicStep = twoPi * (freq * 2.0 * inharmonicFactor) * samplePeriod
                     
-                    voice.phase += baseStep
-                    voice.detunePhase += detunedStep
-                    voice.harmonicPhase += harmonicStep
+                    voices[i].phase += baseStep
+                    voices[i].detunePhase += detunedStep
+                    voices[i].harmonicPhase += harmonicStep
                     
-                    if voice.phase > 2.0 * Double.pi { voice.phase -= 2.0 * Double.pi }
-                    if voice.detunePhase > 2.0 * Double.pi { voice.detunePhase -= 2.0 * Double.pi }
-                    if voice.harmonicPhase > 2.0 * Double.pi { voice.harmonicPhase -= 2.0 * Double.pi }
+                    if voices[i].phase > twoPi { voices[i].phase -= twoPi }
+                    if voices[i].detunePhase > twoPi { voices[i].detunePhase -= twoPi }
+                    if voices[i].harmonicPhase > twoPi { voices[i].harmonicPhase -= twoPi }
                     
                     // Piano envelope: sharp percussive hammer attack + exponential multi-stage decay
-                    let attackTime = 0.005
-                    let attackGain: Float = voice.ageSeconds < attackTime ? Float(voice.ageSeconds / attackTime) : 1.0
+                    let attackTime = 0.004
+                    let attackGain: Float = voices[i].ageSeconds < attackTime ? Float(voices[i].ageSeconds / attackTime) : 1.0
                     
                     // Pitch-dependent decay (higher notes decay faster than deep bass)
                     let decayConstant = 0.6 + (Double(pitch) / 127.0) * 2.4
-                    var amplitude = exp(-decayConstant * voice.ageSeconds)
+                    var amplitude = exp(-decayConstant * voices[i].ageSeconds)
                     
-                    if voice.isReleased {
-                        let releaseAge = voice.ageSeconds - voice.releaseTime
+                    if voices[i].isReleased {
+                        let releaseAge = voices[i].ageSeconds - voices[i].releaseTime
                         amplitude *= exp(-18.0 * releaseAge) // rapid damper damping
                         if releaseAge > 0.15 {
-                            voicesToRemove.append(pitch)
+                            voicesToRemove.insert(pitch)
                         }
-                    } else if amplitude < 0.0005 || voice.ageSeconds > 8.0 {
-                        voicesToRemove.append(pitch)
+                    } else if amplitude < 0.0005 || voices[i].ageSeconds > 8.0 {
+                        voicesToRemove.insert(pitch)
                     }
                     
                     // Unison chorus + 2nd and 3rd harmonics + warm felt fundamental
-                    let s1 = sin(voice.phase)
-                    let s2 = sin(voice.detunePhase) * 0.7
-                    let s3 = sin(voice.harmonicPhase) * 0.35 * exp(-3.0 * decayConstant * voice.ageSeconds)
-                    let s4 = sin(voice.phase * 3.0) * 0.15 * exp(-5.0 * decayConstant * voice.ageSeconds)
+                    let s1 = sin(voices[i].phase)
+                    let s2 = sin(voices[i].detunePhase) * 0.7
+                    let s3 = sin(voices[i].harmonicPhase) * 0.35 * exp(-3.0 * decayConstant * voices[i].ageSeconds)
+                    let s4 = sin(voices[i].phase * 3.0) * 0.15 * exp(-5.0 * decayConstant * voices[i].ageSeconds)
                     
-                    let voiceSample = Float(s1 + s2 + s3 + s4) * attackGain * Float(amplitude) * voice.velocity * 0.35
+                    let voiceSample = Float(s1 + s2 + s3 + s4) * attackGain * Float(amplitude) * voices[i].velocity * 0.28
                     mixedSample += voiceSample
-                    
-                    self.activeVoices[pitch] = voice
                 }
                 
                 // Metronome click generation
                 if self.metronomeClickCountdown > 0 {
                     let clickFreq = self.metronomeIsDownbeat ? 1200.0 : 800.0
                     let clickSample = Float(sin(self.metronomePhase)) * (Float(self.metronomeClickCountdown) / 800.0) * 0.3
-                    self.metronomePhase += 2.0 * Double.pi * clickFreq * samplePeriod
+                    self.metronomePhase += twoPi * clickFreq * samplePeriod
                     self.metronomeClickCountdown -= 1
                     mixedSample += clickSample
                 }
                 
-                let finalSample = max(-0.98, min(0.98, mixedSample * self.masterVolume))
+                // Warm, analog soft-saturation limiter (tanh) prevents digital clipping on chords
+                let driven = mixedSample * self.masterVolume
+                let finalSample = Float(tanh(Double(driven * 0.85))) * 0.98
                 leftChannel[frame] = finalSample
                 rightChannel?[frame] = finalSample
             }
             
+            // Write back updated voice states once per audio buffer
+            for voice in voices {
+                if !voicesToRemove.contains(voice.pitch) {
+                    self.activeVoices[voice.pitch] = voice
+                }
+            }
             // Cleanup decayed voices
             for pitch in voicesToRemove {
                 self.activeVoices.removeValue(forKey: pitch)
@@ -195,6 +205,12 @@ public final class PianoAudioEngine: ObservableObject {
         let freq = 440.0 * pow(2.0, Double(clampedPitch - 69) / 12.0)
         
         os_unfair_lock_lock(voiceLock)
+        if activeVoices.count >= 32 {
+            // Voice stealing: steal oldest voice to prevent CPU overload and keep polyphony clean
+            if let oldest = activeVoices.values.max(by: { $0.ageSeconds < $1.ageSeconds }) {
+                activeVoices.removeValue(forKey: oldest.pitch)
+            }
+        }
         activeVoices[clampedPitch] = ActiveVoice(
             pitch: clampedPitch,
             frequency: freq,

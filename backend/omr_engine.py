@@ -329,13 +329,17 @@ def run_cloud_ai_transcription(
             img_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
             
             prompt = (
-                "You are an expert Optical Music Recognition (OMR) system. "
-                "Transcribe this sheet music score into valid MusicXML 3.1 (<score-partwise>). "
-                "Accurately recognize all staves (Treble and Bass grand staff), measure barlines, "
-                "key signatures, clefs, time signatures, notes with exact pitches and durations, "
-                "chords, accidentals, and rests. "
-                "Output ONLY raw MusicXML starting with <?xml version=\"1.0\" encoding=\"UTF-8\"?> "
-                "and ending with </score-partwise>. Do not include markdown code fences or conversational text."
+                "You are an expert Optical Music Recognition (OMR) system and master musicologist.\n"
+                "Transcribe this piano sheet music score into valid, fully compliant, playable MusicXML 3.1 (<score-partwise>).\n\n"
+                "Strict MusicXML Formatting Requirements:\n"
+                "1. Document Structure: Root must be <score-partwise version=\"3.1\"> with <part-list> defining <score-part id=\"P1\"><part-name>Piano</part-name></score-part></part-list>.\n"
+                "2. Staves & Clefs: Piano grand staff with <staves>2</staves>. In measure 1 attributes, define clef 1 as Treble (<sign>G</sign><line>2</line><staff>1</staff>) and clef 2 as Bass (<sign>F</sign><line>4</line><staff>2</staff>).\n"
+                "3. Timing & Divisions: Explicitly define <divisions>4</divisions> in measure 1 attributes (4 divisions = 1 quarter note). All note durations must be exact multiples: whole=16, half=8, dotted quarter=6, quarter=4, dotted eighth=3, eighth=2, sixteenth=1. Always include <duration> and <type>.\n"
+                "4. Exact Pitches: Every note pitch must contain exact uppercase <step> (A-G), <octave> (e.g. C4 is Middle C, treble notes typically octaves 4-5, bass notes octaves 2-3), and <alter> (-1 for flat, 1 for sharp, 0 for natural) when accidentals appear.\n"
+                "5. Grand Staff Polyphony: In each measure, specify all staff 1 (treble, voice 1) notes first. Then write <backup><duration>MEASURE_TOTAL_DIVISIONS</duration></backup>, followed by all staff 2 (bass, voice 2) notes. Every note must specify <staff>1</staff> or <staff>2</staff>.\n"
+                "6. Chords: When multiple notes sound together at the exact same beat on the same staff, the first note is standard and every subsequent note MUST include <chord/> with identical <duration> and <staff>.\n"
+                "7. Measures & Ties: Number measures sequentially starting at 1 (<measure number=\"1\">). Encode tied notes with <tie type=\"start\"/> / <tie type=\"stop\"/> and <notations><tied type=\"start\"/></notations>.\n"
+                "8. Output Format: Output ONLY raw valid XML starting with <?xml version=\"1.0\" encoding=\"UTF-8\"?> and ending with </score-partwise>. Do NOT include markdown formatting, code fences (```), commentary, or conversational text."
             )
             
             payload = {
@@ -379,6 +383,12 @@ def run_cloud_ai_transcription(
                                 elif "```" in raw_text:
                                     raw_text = raw_text.split("```", 1)[1].split("```", 1)[0].strip()
                                 if "<score-partwise" in raw_text:
+                                    start_idx = raw_text.find("<?xml")
+                                    if start_idx == -1:
+                                        start_idx = raw_text.find("<score-partwise")
+                                    end_idx = raw_text.rfind("</score-partwise>")
+                                    if end_idx != -1:
+                                        raw_text = raw_text[start_idx:end_idx + len("</score-partwise>")].strip()
                                     # Validate xml structure
                                     ET.fromstring(raw_text)
                                     logger.info(f"Gemini Cloud AI OMR ({candidate}) transcribed {len(raw_text)} bytes of MusicXML.")

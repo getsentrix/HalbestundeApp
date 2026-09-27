@@ -165,7 +165,9 @@ public struct NoteEvent: Identifiable, Codable, Hashable {
     public var boundingBox: CGRect?
     /// Musical accidental override, if explicitly printed
     public var accidental: Accidental?
-    
+    /// Whether this note is a tied continuation from a previous note (held without re-striking)
+    public var isTiedContinuation: Bool
+
     public init(
         id: UUID = UUID(),
         pitch: Pitch,
@@ -176,7 +178,8 @@ public struct NoteEvent: Identifiable, Codable, Hashable {
         measureIndex: Int = 0,
         isRest: Bool = false,
         boundingBox: CGRect? = nil,
-        accidental: Accidental? = nil
+        accidental: Accidental? = nil,
+        isTiedContinuation: Bool = false
     ) {
         self.id = id
         self.pitch = pitch
@@ -188,8 +191,9 @@ public struct NoteEvent: Identifiable, Codable, Hashable {
         self.isRest = isRest
         self.boundingBox = boundingBox
         self.accidental = accidental
+        self.isTiedContinuation = isTiedContinuation
     }
-    
+
     public var endBeat: Double {
         return startBeat + durationBeats
     }

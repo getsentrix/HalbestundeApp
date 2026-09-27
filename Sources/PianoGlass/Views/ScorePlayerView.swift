@@ -144,6 +144,9 @@ public struct ScorePlayerView: View {
                             onEditingChanged: { editing in
                                 isDraggingScrubber = editing
                                 if !editing {
+                                    #if canImport(UIKit)
+                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                    #endif
                                     viewModel.seek(toBeat: scrubBeat)
                                 }
                             }
@@ -156,62 +159,85 @@ public struct ScorePlayerView: View {
                                 .foregroundColor(.secondary)
                             Spacer()
                             Button(action: {
+                                #if canImport(UIKit)
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                #endif
                                 showRemainingTime.toggle()
                             }) {
                                 Text(showRemainingTime ? viewModel.formattedRemainingTime : viewModel.formattedTotalTime)
                                     .font(.caption.monospacedDigit())
                                     .foregroundColor(.secondary)
+                                    .padding(.vertical, 4)
+                                    .padding(.horizontal, 6)
+                                    .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
                         }
                     }
                     .padding(.horizontal, 24)
                     
-                    // 4. Primary Playback Controls
-                    HStack(spacing: 38) {
-                        // Previous Measure
+                    // 4. Primary Playback Controls with Generous Touch Targets & Haptics
+                    HStack(spacing: 36) {
+                        // Previous Measure (>= 44x44 touch target)
                         Button(action: {
+                            #if canImport(UIKit)
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            #endif
                             let prev = max(0, viewModel.currentMeasureIndex - 1)
                             viewModel.seek(toMeasure: prev)
                         }) {
                             Image(systemName: "backward.fill")
                                 .font(.system(size: 24))
                                 .foregroundColor(.primary)
+                                .frame(width: 48, height: 48)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         
-                        // Large Play / Pause
+                        // Large Play / Pause (68x68 touch target)
                         Button(action: {
-                            viewModel.togglePlayPause()
+                            #if canImport(UIKit)
+                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                            #endif
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                viewModel.togglePlayPause()
+                            }
                         }) {
                             ZStack {
                                 Circle()
                                     .fill(Color.accentColor)
-                                    .frame(width: 64, height: 64)
-                                    .shadow(color: Color.accentColor.opacity(0.3), radius: 8, y: 4)
+                                    .frame(width: 68, height: 68)
+                                    .shadow(color: Color.accentColor.opacity(0.35), radius: 10, y: 4)
                                 
                                 Image(systemName: viewModel.isPlaying ? "pause.fill" : "play.fill")
-                                    .font(.system(size: 26, weight: .bold))
+                                    .font(.system(size: 28, weight: .bold))
                                     .foregroundColor(.white)
                                     .offset(x: viewModel.isPlaying ? 0 : 2)
                             }
+                            .frame(width: 68, height: 68)
+                            .contentShape(Circle())
                         }
                         .buttonStyle(.plain)
                         
-                        // Next Measure
+                        // Next Measure (>= 44x44 touch target)
                         Button(action: {
+                            #if canImport(UIKit)
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            #endif
                             let next = min(max(0, viewModel.currentScore.measures.count - 1), viewModel.currentMeasureIndex + 1)
                             viewModel.seek(toMeasure: next)
                         }) {
                             Image(systemName: "forward.fill")
                                 .font(.system(size: 24))
                                 .foregroundColor(.primary)
+                                .frame(width: 48, height: 48)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                     }
-                    .padding(.vertical, 6)
+                    .padding(.vertical, 8)
                     
-                    // 5. Speed / Tempo Controls & Restart
+                    // 5. Speed / Tempo Controls & Restart (minimum 44pt touch heights)
                     HStack(spacing: 16) {
                         Menu {
                             Button("0.5x Speed") { viewModel.tempoBPM = viewModel.currentScore.defaultBPM * 0.5 }
@@ -221,29 +247,34 @@ public struct ScorePlayerView: View {
                             Button("1.5x Speed") { viewModel.tempoBPM = viewModel.currentScore.defaultBPM * 1.5 }
                             Button("2.0x Double") { viewModel.tempoBPM = viewModel.currentScore.defaultBPM * 2.0 }
                         } label: {
-                            HStack(spacing: 4) {
+                            HStack(spacing: 6) {
                                 Image(systemName: "speedometer")
                                 Text(String(format: "%.2fx", viewModel.tempoBPM / max(1.0, viewModel.currentScore.defaultBPM)))
-                                    .font(.subheadline.weight(.medium))
+                                    .font(.subheadline.weight(.semibold))
                             }
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
                             .background(Color(.secondarySystemFill))
                             .clipShape(Capsule())
+                            .frame(minHeight: 44)
                         }
                         
                         Button(action: {
+                            #if canImport(UIKit)
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            #endif
                             viewModel.seek(toBeat: 0.0)
                         }) {
-                            HStack(spacing: 4) {
+                            HStack(spacing: 6) {
                                 Image(systemName: "backward.end")
                                 Text("Restart")
-                                    .font(.subheadline.weight(.medium))
+                                    .font(.subheadline.weight(.semibold))
                             }
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
                             .background(Color(.secondarySystemFill))
                             .clipShape(Capsule())
+                            .frame(minHeight: 44)
                         }
                         .buttonStyle(.plain)
                     }

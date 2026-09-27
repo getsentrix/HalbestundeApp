@@ -70,25 +70,48 @@ public struct ScannerView: View {
                         )
                     
                     if viewModel.isProcessing {
-                        VStack(spacing: 16) {
-                            ProgressView(value: max(0.05, viewModel.progressFraction))
-                                .progressViewStyle(.linear)
-                                .tint(Color.accentColor)
-                                .frame(width: 220)
-                            
-                            HStack(spacing: 8) {
-                                ProgressView()
-                                    .scaleEffect(0.9)
-                                Text("\(Int(viewModel.progressFraction * 100))%")
-                                    .font(.subheadline.monospacedDigit().weight(.bold))
-                                    .foregroundColor(.accentColor)
+                        if viewModel.progressFraction >= 0.99, let score = viewModel.capturedScore {
+                            VStack(spacing: 14) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 56))
+                                    .foregroundColor(.green)
+                                
+                                VStack(spacing: 4) {
+                                    Text(score.title)
+                                        .font(.headline.weight(.bold))
+                                        .foregroundColor(.primary)
+                                        .multilineTextAlignment(.center)
+                                        .lineLimit(2)
+                                    
+                                    Text("Transcription complete • Opening player...")
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(.horizontal, 24)
                             }
-                            
-                            Text(viewModel.statusMessage)
-                                .font(.subheadline.weight(.medium))
-                                .foregroundColor(.primary)
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal, 28)
+                            .transition(.scale.combined(with: .opacity))
+                        } else {
+                            VStack(spacing: 16) {
+                                ProgressView(value: max(0.05, viewModel.progressFraction))
+                                    .progressViewStyle(.linear)
+                                    .tint(Color.accentColor)
+                                    .frame(width: 220)
+                                
+                                HStack(spacing: 8) {
+                                    ProgressView()
+                                        .scaleEffect(0.9)
+                                    Text("\(Int(viewModel.progressFraction * 100))%")
+                                        .font(.subheadline.monospacedDigit().weight(.bold))
+                                        .foregroundColor(.accentColor)
+                                }
+                                
+                                Text(viewModel.statusMessage)
+                                    .font(.subheadline.weight(.medium))
+                                    .foregroundColor(.primary)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal, 28)
+                            }
+                            .transition(.opacity)
                         }
                     } else {
                         VStack(spacing: 14) {

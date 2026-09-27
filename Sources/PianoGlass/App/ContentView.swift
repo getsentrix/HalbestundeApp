@@ -21,10 +21,12 @@ public struct ContentView: View {
             TabView(selection: $selectedTab) {
                 // 1. Library / Scans Tab
                 SongLibraryView { selectedScore in
-                    playerViewModel.loadScore(selectedScore)
-                    playerViewModel.play()
-                    isMiniPlayerDismissed = false
-                    selectedTab = 2
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                        playerViewModel.loadScore(selectedScore)
+                        playerViewModel.play()
+                        isMiniPlayerDismissed = false
+                        selectedTab = 2
+                    }
                 }
                 .tabItem {
                     Label("Library", systemImage: "music.note.list")
@@ -33,10 +35,12 @@ public struct ContentView: View {
                 
                 // 2. Document Scanner Tab
                 ScannerView { scannedScore in
-                    playerViewModel.loadScore(scannedScore)
-                    playerViewModel.play()
-                    isMiniPlayerDismissed = false
-                    selectedTab = 2
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                        playerViewModel.loadScore(scannedScore)
+                        playerViewModel.play()
+                        isMiniPlayerDismissed = false
+                        selectedTab = 2
+                    }
                 }
                 .tabItem {
                     Label("Scan", systemImage: "doc.viewfinder")

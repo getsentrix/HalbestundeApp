@@ -10,10 +10,10 @@
       "name": "PianoGlass",
       "bundleIdentifier": "com.pianoglass.app",
       "developerName": "Dylan",
-      "version": "1.0.20",
-      "versionDate": "2026-09-27T16:49:04Z",
-      "versionDescription": "Release v1.0.20:\n\u2022 Sheet music scanner with camera capture and photo import\n\u2022 On-device acoustic grand piano audio engine\n\u2022 Minimal player with scrub bar, tempo slider, and looping\n\u2022 Score library with secure local storage",
-      "downloadURL": "https://github.com/getsentrix/PianoGlass/releases/download/v1.0.20/PianoGlass.ipa",
+      "version": "1.0.21",
+      "versionDate": "2026-09-27T17:32:14Z",
+      "versionDescription": "Release v1.0.21:\n\u2022 Sheet music scanner with camera capture and photo import\n\u2022 On-device acoustic grand piano audio engine\n\u2022 Minimal player with scrub bar, tempo slider, and looping\n\u2022 Score library with secure local storage",
+      "downloadURL": "https://github.com/getsentrix/PianoGlass/releases/download/v1.0.21/PianoGlass.ipa",
       "localizedDescription": "PianoGlass turns sheet music into playable audio with Apple Vision OMR and native audio playback in a distraction-free, minimal iOS interface.",
       "iconURL": "https://getsentrix.github.io/PianoGlass/assets/app-icon.png",
       "tintColor": "00E5FF",
@@ -33,10 +33,10 @@
   ],
   "news": [
     {
-      "title": "PianoGlass v1.0.20 Available",
-      "identifier": "pianoglass-v1020-release",
+      "title": "PianoGlass v1.0.21 Available",
+      "identifier": "pianoglass-v1021-release",
       "caption": "Scan sheet music with minimal native iOS UI",
-      "date": "2026-09-27T16:49:04Z",
+      "date": "2026-09-27T17:32:14Z",
       "tintColor": "00E5FF",
       "appID": "com.pianoglass.app",
       "notify": true

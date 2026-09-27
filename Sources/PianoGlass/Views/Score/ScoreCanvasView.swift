@@ -38,7 +38,12 @@ public struct ScoreCanvasView: View {
                         )
                         .frame(width: measureWidth, height: systemHeight)
                         .id(measure.index)
+                        .contentShape(Rectangle())
                         .onTapGesture {
+                            #if canImport(UIKit)
+                            let generator = UIImpactFeedbackGenerator(style: .light)
+                            generator.impactOccurred()
+                            #endif
                             viewModel.seek(toMeasure: measure.index)
                         }
                     }
@@ -105,12 +110,15 @@ private struct MeasureView: View {
             ZStack(alignment: .leading) {
                 // Active measure / Loop background highlight
                 if isInLoopRange {
-                    RoundedRectangle(cornerRadius: 8)
+                    RoundedRectangle(cornerRadius: 10)
                         .fill(Color.accentColor.opacity(0.12))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 8)
+                            RoundedRectangle(cornerRadius: 10)
                                 .stroke(Color.accentColor.opacity(0.35), lineWidth: 1)
                         )
+                } else if isCurrentMeasure {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.accentColor.opacity(0.05))
                 }
                 
                 // Grand Staff Lines (Treble & Bass)
@@ -167,15 +175,29 @@ private struct MeasureView: View {
 // MARK: - Playhead Cursor Line
 private struct PlayheadCursorView: View {
     var body: some View {
-        ZStack {
+        ZStack(alignment: .top) {
+            // Glowing vertical playhead track
             Rectangle()
-                .fill(Color.accentColor)
-                .frame(width: 2)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.accentColor.opacity(0.85),
+                            Color.accentColor,
+                            Color.accentColor.opacity(0.85)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(width: 2.5)
+                .shadow(color: Color.accentColor.opacity(0.45), radius: 3, x: 0, y: 0)
             
+            // Refined glowing indicator bead
             Circle()
                 .fill(Color.accentColor)
-                .frame(width: 7, height: 7)
-                .offset(y: -75)
+                .frame(width: 8, height: 8)
+                .shadow(color: Color.accentColor.opacity(0.6), radius: 4, y: 1)
+                .offset(y: -4)
         }
     }
 }
@@ -218,12 +240,21 @@ private struct NoteGlyphView: View {
                     .fill(isActive ? activeColor : restingColor)
                     .frame(width: 12, height: 9)
                     .rotationEffect(.degrees(-18))
+                    .shadow(color: isActive ? activeColor.opacity(0.6) : Color.clear, radius: 4, y: 1)
                 
                 // Stem
                 Rectangle()
                     .fill(isActive ? activeColor : restingColor)
                     .frame(width: 1.5, height: 26)
                     .offset(x: 5, y: -13)
+                
+                // Tied note indicator arc
+                if note.isTiedContinuation {
+                    Image(systemName: "link")
+                        .font(.system(size: 7, weight: .bold))
+                        .foregroundColor(isActive ? activeColor : restingColor.opacity(0.6))
+                        .offset(x: -8, y: -6)
+                }
             }
             .position(x: xOffset, y: yOffset)
         }
