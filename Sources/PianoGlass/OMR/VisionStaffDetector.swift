@@ -37,58 +37,112 @@ public final class VisionStaffDetector {
         let horizontalProfile = calculateHorizontalProfile(for: cgImage)
         let staffPeakIndices = findStaffPeaks(in: horizontalProfile, height: height)
         
-        // Group peaks into 5-line staves and grand staff pairs (Treble + Bass)
-        var systems = [DetectedStaffSystem]()
-        var systemIndex = 0
-        var i = 0
-        
-        while i + 9 < staffPeakIndices.count {
-            let trebleLines = Array(staffPeakIndices[i..<(i + 5)])
-            let bassLines = Array(staffPeakIndices[(i + 5)..<(i + 10)])
+        // 2. Group peaks into individual 5-line staves with consistent spacing
+        var detectedStaves: [[CGFloat]] = []
+        var idx = 0
+        while idx + 4 < staffPeakIndices.count {
+            let candidateLines = Array(staffPeakIndices[idx..<(idx + 5)])
+            let spacing = averageSpacing(candidateLines)
             
-            // Check consistent line spacing
-            let trebleSpacing = averageSpacing(trebleLines)
-            let bassSpacing = averageSpacing(bassLines)
-            let avgSpacing = (trebleSpacing + bassSpacing) / 2.0
+            var consistent = true
+            for j in 0..<4 {
+                let gap = abs(candidateLines[j + 1] - candidateLines[j])
+                if abs(gap - spacing) > spacing * 0.35 || gap < 4.0 || gap > CGFloat(height) / 8.0 {
+                    consistent = false
+                    break
+                }
+            }
             
-            // Staves should have spacing within reasonable range
-            if avgSpacing > 4.0 && avgSpacing < CGFloat(height) / 10.0 {
-                let topY = trebleLines.first ?? 0
-                let bottomY = bassLines.last ?? CGFloat(height)
-                
-                // Find barlines across this grand staff system
-                let barlines = detectBarlines(
-                    in: cgImage,
-                    topY: topY,
-                    bottomY: bottomY,
-                    width: width
-                )
-                
-                let systemBounds = CGRect(
-                    x: 0,
-                    y: max(0, topY - avgSpacing * 2),
-                    width: CGFloat(width),
-                    height: min(CGFloat(height), (bottomY - topY) + avgSpacing * 4)
-                )
-                
-                systems.append(DetectedStaffSystem(
-                    systemIndex: systemIndex,
-                    trebleStaffLines: trebleLines,
-                    bassStaffLines: bassLines,
-                    staffLineSpacing: avgSpacing,
-                    barlineXPositions: barlines,
-                    bounds: systemBounds
-                ))
-                systemIndex += 1
-                i += 10
+            if consistent {
+                detectedStaves.append(candidateLines)
+                idx += 5
             } else {
-                i += 1
+                idx += 1
             }
         }
         
-        // Fallback: If image quality was low or noise obscured lines, provide default grand staff systems
-        if systems.isEmpty {
-            systems = generateDefaultSystems(width: width, height: height)
+        #if DEBUG
+        print("[VisionStaffDetector] Found \(detectedStaves.count) valid 5-line staves from \(staffPeakIndices.count) peaks.")
+        #endif
+        
+        guard !detectedStaves.isEmpty else { return [] }
+        
+        // 3. Group 5-line staves into Grand Staff pairs (Treble + Bass) or single staff systems
+        var systems = [DetectedStaffSystem]()
+        var systemIndex = 0
+        var s = 0
+        
+        while s < detectedStaves.count {
+            let trebleLines = detectedStaves[s]
+            let trebleSpacing = averageSpacing(trebleLines)
+            
+            // Check if next staff is a bass staff forming a grand staff pair
+            if s + 1 < detectedStaves.count {
+                let nextLines = detectedStaves[s + 1]
+                let nextSpacing = averageSpacing(nextLines)
+                let interStaffGap = nextLines[0] - trebleLines[4]
+                
+                // Typical grand staff gap is between 1.0x and 7.0x staff spacing
+                if interStaffGap >= trebleSpacing * 1.0 && interStaffGap <= trebleSpacing * 7.0 {
+                    let avgSpacing = (trebleSpacing + nextSpacing) / 2.0
+                    let topY = trebleLines[0]
+                    let bottomY = nextLines[4]
+                    
+                    let barlines = detectBarlines(
+                        in: cgImage,
+                        topY: topY,
+                        bottomY: bottomY,
+                        width: width
+                    )
+                    
+                    let systemBounds = CGRect(
+                        x: 0,
+                        y: max(0, topY - avgSpacing * 2.5),
+                        width: CGFloat(width),
+                        height: min(CGFloat(height), (bottomY - topY) + avgSpacing * 5.0)
+                    )
+                    
+                    systems.append(DetectedStaffSystem(
+                        systemIndex: systemIndex,
+                        trebleStaffLines: trebleLines,
+                        bassStaffLines: nextLines,
+                        staffLineSpacing: avgSpacing,
+                        barlineXPositions: barlines,
+                        bounds: systemBounds
+                    ))
+                    systemIndex += 1
+                    s += 2
+                    continue
+                }
+            }
+            
+            // Single staff system (melody, lead sheet, or isolated staff)
+            let topY = trebleLines[0]
+            let bottomY = trebleLines[4]
+            let barlines = detectBarlines(
+                in: cgImage,
+                topY: topY,
+                bottomY: bottomY,
+                width: width
+            )
+            
+            let systemBounds = CGRect(
+                x: 0,
+                y: max(0, topY - trebleSpacing * 2.5),
+                width: CGFloat(width),
+                height: min(CGFloat(height), (bottomY - topY) + trebleSpacing * 5.0)
+            )
+            
+            systems.append(DetectedStaffSystem(
+                systemIndex: systemIndex,
+                trebleStaffLines: trebleLines,
+                bassStaffLines: [],
+                staffLineSpacing: trebleSpacing,
+                barlineXPositions: barlines,
+                bounds: systemBounds
+            ))
+            systemIndex += 1
+            s += 1
         }
         
         return systems
@@ -287,31 +341,5 @@ public final class VisionStaffDetector {
         for i in 1...measureCount {
             barlines.append(barlines[0] + step * CGFloat(i))
         }
-        return barlines
-    }
-    
-    private func generateDefaultSystems(width: Int, height: Int) -> [DetectedStaffSystem] {
-        let w = CGFloat(width)
-        let h = CGFloat(height)
-        let systemHeight = h * 0.35
-        let spacing: CGFloat = 10.0
-        
-        var systems = [DetectedStaffSystem]()
-        for sysIdx in 0..<2 {
-            let startY = h * 0.12 + CGFloat(sysIdx) * (systemHeight + 40)
-            let treble = (0..<5).map { startY + CGFloat($0) * spacing }
-            let bass = (0..<5).map { startY + 65.0 + CGFloat($0) * spacing }
-            let barlines = [w * 0.1, w * 0.32, w * 0.54, w * 0.76, w * 0.95]
-            
-            systems.append(DetectedStaffSystem(
-                systemIndex: sysIdx,
-                trebleStaffLines: treble,
-                bassStaffLines: bass,
-                staffLineSpacing: spacing,
-                barlineXPositions: barlines,
-                bounds: CGRect(x: 0, y: startY - 20, width: w, height: systemHeight)
-            ))
-        }
-        return systems
     }
 }

@@ -224,17 +224,39 @@ class FallbackOMR:
                 return []
 
             roi = arr[top_y:bot_y, :]
+            binary_roi = (roi < thresh).copy()
 
-            # Per-column dark-pixel count
-            col_density = np.sum(roi < thresh, axis=0).astype(np.float32)
+            # Staff line inpainting: remove isolated staff lines so full-width lines
+            # do not trigger false notehead detections
+            check_d = max(2, int(round(spacing * 0.35)))
+            for sy in staff_ys:
+                line_y_local = sy - top_y
+                if check_d <= line_y_local < binary_roi.shape[0] - check_d:
+                    above_white = ~binary_roi[line_y_local - check_d, :]
+                    below_white = ~binary_roi[line_y_local + check_d, :]
+                    isolated = above_white & below_white
+                    binary_roi[line_y_local, isolated] = False
+                    if line_y_local - 1 >= 0:
+                        binary_roi[line_y_local - 1, isolated] = False
+                    if line_y_local + 1 < binary_roi.shape[0]:
+                        binary_roi[line_y_local + 1, isolated] = False
 
-            # Background = median density (dominated by full-width staff lines)
-            staff_bg = float(np.median(col_density))
-            # A notehead must add at least 40% of spacing to a localised column cluster
-            nh_thresh = staff_bg + spacing * 0.4
+            # Morphological horizontal opening: erases thin vertical stems (width <= 0.35 * spacing)
+            # so notehead bodies are isolated and centroid is not corrupted by stems
+            k = max(2, int(round(spacing * 0.28)))
+            eroded = np.ones_like(binary_roi, dtype=bool)
+            for dx in range(-k, k + 1):
+                eroded &= np.roll(binary_roi, dx, axis=1)
+            opened = np.zeros_like(binary_roi, dtype=bool)
+            for dx in range(-k, k + 1):
+                opened |= np.roll(eroded, dx, axis=1)
+
+            # Per-column dark-pixel count of isolated noteheads
+            col_density = np.sum(opened, axis=0).astype(np.float32)
+            nh_thresh = max(1.0, float(spacing * 0.40))
 
             logger.debug(f"FallbackOMR {'treble' if is_treble else 'bass'}: "
-                         f"spacing={spacing:.1f}px, bg={staff_bg:.1f}, "
+                         f"spacing={spacing:.1f}px, "
                          f"nh_thresh={nh_thresh:.1f}, roi_h={bot_y - top_y}")
 
             candidate_cols = np.where(col_density > nh_thresh)[0]
@@ -258,23 +280,28 @@ class FallbackOMR:
                     cluster.append(candidate_cols[i])
                 i += 1
 
+                cluster_w = cluster[-1] - cluster[0] + 1
+                max_nh_w = max(10, int(spacing * 2.2))
+                min_nh_w = max(2, int(spacing * 0.35))
+                if cluster_w > max_nh_w or cluster_w < min_nh_w:
+                    continue
+
                 cx = int(np.mean(cluster))
 
                 # Enforce minimum notehead separation
                 if noteheads and (cx - noteheads[-1][0]) < min_gap:
                     continue
 
-                # Weighted Y centroid of dark pixels in this column cluster
+                # Weighted Y centroid on isolated notehead pixels (stem-free)
                 x_lo = max(0, cx - 2)
                 x_hi = min(w, cx + 3)
-                sub_roi = roi[:, x_lo:x_hi]
-                darkness = np.clip(thresh - sub_roi.astype(np.float32), 0, None)
-                total_w = float(darkness.sum())
+                sub_roi = opened[:, x_lo:x_hi]
+                total_w = float(sub_roi.sum())
                 if total_w < 1.0:
                     continue
 
                 ys_idx = np.arange(sub_roi.shape[0], dtype=np.float64)
-                cy_local = float(np.dot(darkness.sum(axis=1), ys_idx) / total_w)
+                cy_local = float(np.dot(sub_roi.sum(axis=1), ys_idx) / total_w)
                 global_y = top_y + cy_local
 
                 # Staff position: 0.0 = bottom staff line, increases upward (each half-step = 0.5)

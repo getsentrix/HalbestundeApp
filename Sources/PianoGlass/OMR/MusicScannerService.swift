@@ -67,7 +67,15 @@ public final class MusicScannerService: ObservableObject {
         let useRemote = UserDefaults.standard.object(forKey: "useRemoteOMR") as? Bool ?? true
         let serverURL = UserDefaults.standard.string(forKey: "omrBackendURL") ?? "http://localhost:8000"
         
-        if useRemote && !serverURL.isEmpty, let imgData = cgImageToData(cgImage) {
+        var canAttemptRemote = useRemote && !serverURL.isEmpty
+        #if !targetEnvironment(simulator)
+        // On physical iOS devices, localhost / 127.0.0.1 is unreachable and hangs on timeout.
+        if serverURL.contains("localhost") || serverURL.contains("127.0.0.1") {
+            canAttemptRemote = false
+        }
+        #endif
+        
+        if canAttemptRemote, let imgData = cgImageToData(cgImage) {
             do {
                 await updateState(.enhancingContrast, progress: 0.20)
                 await updateState(.detectingStaffSystems, progress: 0.50)

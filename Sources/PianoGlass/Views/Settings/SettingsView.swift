@@ -14,6 +14,8 @@ public struct SettingsView: View {
     @AppStorage("enhanceScanContrast") private var enhanceScanContrast: Bool = true
     @AppStorage("omrBackendURL") private var omrBackendURL: String = "http://localhost:8000"
     @AppStorage("useRemoteOMR") private var useRemoteOMR: Bool = true
+    @State private var isTestingConnection: Bool = false
+    @State private var testStatus: String? = nil
     
     public init(audioEngine: PianoAudioEngine = .shared) {
         self.audioEngine = audioEngine
@@ -60,18 +62,38 @@ public struct SettingsView: View {
                             Text("OMR Backend Server")
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
-                            TextField("http://localhost:8000", text: $omrBackendURL)
+                            TextField("http://192.168.1.100:8000", text: $omrBackendURL)
                                 .textFieldStyle(.roundedBorder)
                                 .autocorrectionDisabled()
                                 .textInputAutocapitalization(.never)
                                 .keyboardType(.URL)
+                            
+                            Button(action: testBackendConnection) {
+                                HStack {
+                                    if isTestingConnection {
+                                        ProgressView()
+                                            .controlSize(.small)
+                                    } else {
+                                        Image(systemName: "network")
+                                    }
+                                    Text("Test Connection")
+                                }
+                            }
+                            .disabled(isTestingConnection || omrBackendURL.isEmpty)
+                            .padding(.top, 2)
+                            
+                            if let status = testStatus {
+                                Text(status)
+                                    .font(.caption)
+                                    .foregroundColor(status.contains("Online") ? .green : .orange)
+                            }
                         }
                         .padding(.vertical, 2)
                     }
                 } header: {
                     Text("Scanner & Recognition")
                 } footer: {
-                    Text("Connects to Python OMR backend (oemer + music21) for high-accuracy neural transcription. Falls back to on-device recognition when unreachable.")
+                    Text("Connects to Python OMR backend (oemer + music21). On physical iPhone, enter your computer's local WiFi IP (e.g. http://192.168.x.x:8000). Falls back to on-device recognition when offline.")
                 }
                 
                 // Touch & Feedback
@@ -142,6 +164,39 @@ public struct SettingsView: View {
             }
             .listStyle(.insetGrouped)
             .navigationTitle("Settings")
+        }
+    }
+    
+    private func testBackendConnection() {
+        guard let url = URL(string: omrBackendURL)?.appendingPathComponent("api/health") else {
+            testStatus = "Invalid server URL"
+            return
+        }
+        isTestingConnection = true
+        testStatus = nil
+        
+        Task {
+            do {
+                var request = URLRequest(url: url)
+                request.timeoutInterval = 4.0
+                let (_, response) = try await URLSession.shared.data(for: request)
+                if let httpResp = response as? HTTPURLResponse, httpResp.statusCode == 200 {
+                    await MainActor.run {
+                        self.testStatus = "Online: Server connected"
+                        self.isTestingConnection = false
+                    }
+                } else {
+                    await MainActor.run {
+                        self.testStatus = "Server returned error"
+                        self.isTestingConnection = false
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    self.testStatus = "Unreachable. Use PC local IP (e.g. 192.168.x.x:8000)"
+                    self.isTestingConnection = false
+                }
+            }
         }
     }
 }

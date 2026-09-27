@@ -119,20 +119,13 @@ public final class ScannerViewModel: ObservableObject {
                     }
                     
                 case .failure(let error):
-                    // Gracefully create a playable fallback score instead of failing silently
-                    let fallbackScore = self.createFallbackScore(title: title.isEmpty ? "Scanned Sheet Music" : title)
-                    self.capturedScore = fallbackScore
-                    let savedScore = self.saveAndOpenScore(score: fallbackScore) ?? fallbackScore
-                    self.scanConfidence = 0.88
-                    self.progressFraction = 1.0
-                    self.statusMessage = "Loaded playable practice arrangement"
-                    self.errorMessage = "Could not fully resolve notation from image: \(error.localizedDescription). Loaded a playable practice score."
-                    self.pendingFallbackScore = savedScore
-                    
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                        self.isProcessing = false
-                        self.onScoreAccepted?(savedScore)
-                    }
+                    self.isProcessing = false
+                    self.currentStep = .camera
+                    self.progressFraction = 0.0
+                    self.statusMessage = "Scan failed"
+                    self.errorMessage = "Could not recognize notation in this scan: \(error.localizedDescription)\n\nPlease ensure the sheet music is flat, well-lit, and fills the viewfinder."
+                    self.pendingFallbackScore = nil
+                    self.showErrorAlert = true
                 }
             }
         }
@@ -352,7 +345,7 @@ public final class ScannerViewModel: ObservableObject {
             let width = 800
             let height = 1000
             let colorSpace = CGColorSpaceCreateDeviceRGB()
-            let context = CGContext(
+            guard let context = CGContext(
                 data: nil,
                 width: width,
                 height: height,
@@ -360,15 +353,51 @@ public final class ScannerViewModel: ObservableObject {
                 bytesPerRow: width * 4,
                 space: colorSpace,
                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-            )!
+            ) else { return }
+            
             #if canImport(UIKit)
             context.setFillColor(UIColor.white.cgColor)
             #else
             context.setFillColor(gray: 1.0, alpha: 1.0)
             #endif
             context.fill(CGRect(x: 0, y: 0, width: width, height: height))
-            let demoCGImage = context.makeImage()!
             
+            #if canImport(UIKit)
+            context.setFillColor(UIColor.black.cgColor)
+            context.setStrokeColor(UIColor.black.cgColor)
+            #else
+            context.setFillColor(gray: 0.0, alpha: 1.0)
+            context.setStrokeColor(gray: 0.0, alpha: 1.0)
+            #endif
+            context.setLineWidth(2.0)
+            
+            // Treble staff lines (y = 200, 220, 240, 260, 280)
+            for y in stride(from: 200, through: 280, by: 20) {
+                context.strokeLineSegments(between: [CGPoint(x: 80, y: y), CGPoint(x: 720, y: y)])
+            }
+            // Bass staff lines (y = 380, 400, 420, 440, 460)
+            for y in stride(from: 380, through: 460, by: 20) {
+                context.strokeLineSegments(between: [CGPoint(x: 80, y: y), CGPoint(x: 720, y: y)])
+            }
+            // Barlines
+            for x in [80, 290, 500, 720] {
+                context.strokeLineSegments(between: [CGPoint(x: x, y: 200), CGPoint(x: x, y: 460)])
+            }
+            // Real noteheads (ellipses) with stems
+            let noteDefs: [(x: CGFloat, y: CGFloat)] = [
+                (180, 280), // E4 (Line 1)
+                (240, 270), // F4 (Space 1)
+                (360, 260), // G4 (Line 2)
+                (420, 250), // A4 (Space 2)
+                (570, 240), // B4 (Line 3)
+                (640, 230)  // C5 (Space 3)
+            ]
+            for n in noteDefs {
+                context.fillEllipse(in: CGRect(x: n.x - 12, y: n.y - 9, width: 24, height: 18))
+                context.strokeLineSegments(between: [CGPoint(x: n.x + 10, y: n.y), CGPoint(x: n.x + 10, y: n.y - 50)])
+            }
+            
+            guard let demoCGImage = context.makeImage() else { return }
             await self.processCapturedImage(demoCGImage, title: title)
         }
     }
