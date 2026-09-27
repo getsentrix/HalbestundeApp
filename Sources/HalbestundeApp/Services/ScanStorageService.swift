@@ -36,7 +36,7 @@ public final class ScanStorageService {
         }
         do {
             let data = try Data(contentsOf: url)
-            let songs = try JSONDecoder().decode([SongItem].self, data: data)
+            let songs = try JSONDecoder().decode([SongItem].self, from: data)
             return songs
         } catch {
             print("[ScanStorageService] Error loading songs: \(error)")

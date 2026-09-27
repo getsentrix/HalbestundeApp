@@ -92,7 +92,6 @@ public final class RepertoireService {
         // Measure 0 (Pickup / Measure 1): E5 - D#5 - E5 - D#5 - E5 - B4 - D5 - C5
         // Measure 1: A minor motif
         var currentBeat = 0.0
-        let beatUnit = 1.0 // In 3/8, each eighth note is 0.5 beat or 1 count
         
         // Measure 1
         var m1Notes = [NoteEvent]()
@@ -311,7 +310,7 @@ public final class RepertoireService {
         let timeSig = TimeSignature(numerator: 12, denominator: 8)
         let keySig = KeySignature(fifths: -3, mode: "major") // Eb major
         var measures = [Measure]()
-        var currentBeat = 0.0
+        let currentBeat = 0.0
         
         // Beautiful opening phrase: Bb4 - G5 - F5 - Eb5
         var m1Notes = [NoteEvent]()
