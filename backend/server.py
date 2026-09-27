@@ -14,6 +14,8 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTa
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from omr_engine import (
     convert_document_to_images,
