@@ -236,8 +236,14 @@ public struct ScorePlayerView: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
                         
-                        Slider(value: $viewModel.audioEngine.masterVolume, in: 0...1)
-                            .tint(.accentColor)
+                        Slider(
+                            value: Binding(
+                                get: { Double(viewModel.audioEngine.masterVolume) },
+                                set: { viewModel.audioEngine.masterVolume = Float($0) }
+                            ),
+                            in: 0...1
+                        )
+                        .tint(.accentColor)
                         
                         Image(systemName: "speaker.wave.3.fill")
                             .font(.caption)

@@ -11,8 +11,8 @@ import SwiftUI
 import Combine
 
 public final class ScorePlayerViewModel: ObservableObject {
-    public let audioEngine: PianoAudioEngine
-    public let audioScheduler: AudioScheduler
+    public var audioEngine: PianoAudioEngine
+    public var audioScheduler: AudioScheduler
     
     @Published public var currentScore: Score
     @Published public var isPlaying: Bool = false
