@@ -38,6 +38,7 @@
 		AA10001D2C00000100000001 /* ScorePlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB10001D2C00000100000001 /* ScorePlayerView.swift */; };
 		AA10001E2C00000100000001 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB10001E2C00000100000001 /* SettingsView.swift */; };
 		AA10001F2C00000100000001 /* fur_elise.musicxml in Resources */ = {isa = PBXBuildFile; fileRef = BB10001F2C00000100000001 /* fur_elise.musicxml */; };
+		AA1000212C00000100000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BB1000212C00000100000001 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -74,6 +75,7 @@
 		BB10001E2C00000100000001 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Settings/SettingsView.swift"; sourceTree = "<group>"; };
 		BB10001F2C00000100000001 /* fur_elise.musicxml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = fur_elise.musicxml; sourceTree = "<group>"; };
 		BB1000202C00000100000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		BB1000212C00000100000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -211,6 +213,7 @@
 			isa = PBXGroup;
 			children = (
 				BB10001F2C00000100000001 /* fur_elise.musicxml */,
+				BB1000212C00000100000001 /* Assets.xcassets */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -281,6 +284,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA10001F2C00000100000001 /* fur_elise.musicxml in Resources */,
+				AA1000212C00000100000001 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

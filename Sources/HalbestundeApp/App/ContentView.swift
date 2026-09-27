@@ -2,8 +2,9 @@
 //  ContentView.swift
 //  HalbestundeApp
 //
-//  Main container view hosting the liquid glass navigation tab bar,
-//  Score Practice Player, Sheet Music Scanner, Repertoire Library, and Settings.
+//  Streamlined native iOS navigation container inspired by Feather (feather.claration.dev).
+//  Hosts Library, Document Scanner, Focused Player, and Inset Grouped Settings tabs
+//  with an optional native mini-player bar for quick audio control.
 //
 
 import SwiftUI
@@ -11,95 +12,136 @@ import SwiftUI
 public struct ContentView: View {
     @State private var selectedTab: Int = 0
     @StateObject private var playerViewModel = ScorePlayerViewModel()
+    @State private var isMiniPlayerDismissed: Bool = false
     
     public init() {}
     
     public var body: some View {
         ZStack(alignment: .bottom) {
-            // Tab content
             TabView(selection: $selectedTab) {
-                ScorePlayerView(viewModel: playerViewModel)
-                    .tag(0)
+                // 1. Library / Scans Tab
+                SongLibraryView { selectedScore in
+                    playerViewModel.loadScore(selectedScore)
+                    playerViewModel.play()
+                    isMiniPlayerDismissed = false
+                    selectedTab = 2
+                }
+                .tabItem {
+                    Label("Library", systemImage: "music.note.list")
+                }
+                .tag(0)
                 
+                // 2. Document Scanner Tab
                 ScannerView { scannedScore in
                     playerViewModel.loadScore(scannedScore)
-                    withAnimation {
-                        selectedTab = 0
-                    }
+                    playerViewModel.play()
+                    isMiniPlayerDismissed = false
+                    selectedTab = 2
+                }
+                .tabItem {
+                    Label("Scan", systemImage: "doc.viewfinder")
                 }
                 .tag(1)
                 
-                SongLibraryView { selectedScore in
-                    playerViewModel.loadScore(selectedScore)
-                    withAnimation {
-                        selectedTab = 0
+                // 3. Focused Audio Player Tab
+                ScorePlayerView(viewModel: playerViewModel)
+                    .tabItem {
+                        Label("Player", systemImage: "play.circle")
                     }
-                }
-                .tag(2)
+                    .tag(2)
                 
+                // 4. Inset Grouped Settings Tab
                 SettingsView(audioEngine: playerViewModel.audioEngine)
+                    .tabItem {
+                        Label("Settings", systemImage: "gearshape")
+                    }
                     .tag(3)
             }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .ignoresSafeArea()
             
-            // Custom Liquid Glass Bottom Floating Tab Bar
-            LiquidGlassTabBar(selectedTab: $selectedTab)
-                .padding(.horizontal, 24)
-                .padding(.bottom, 8)
+            // Native Mini Player Bar (docked cleanly above tab bar when playing on other tabs)
+            if selectedTab != 2 && !isMiniPlayerDismissed && (playerViewModel.isPlaying || playerViewModel.currentBeat > 0) {
+                MiniPlayerBar(
+                    viewModel: playerViewModel,
+                    onOpenPlayer: {
+                        selectedTab = 2
+                    },
+                    onDismiss: {
+                        playerViewModel.pause()
+                        isMiniPlayerDismissed = true
+                    }
+                )
+                .padding(.horizontal, 16)
+                .padding(.bottom, 62)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
-        .preferredColorScheme(.dark)
     }
 }
 
-// MARK: - Liquid Glass Tab Bar
-private struct LiquidGlassTabBar: View {
-    @Binding var selectedTab: Int
-    
-    private let tabs: [(icon: String, label: String, tag: Int)] = [
-        ("pianokeys", "Practice", 0),
-        ("camera.viewfinder", "Scan", 1),
-        ("music.note.list", "Repertoire", 2),
-        ("gearshape.fill", "Settings", 3)
-    ]
+// MARK: - Native Apple Music / Feather-Style Mini Player Bar
+private struct MiniPlayerBar: View {
+    @ObservedObject var viewModel: ScorePlayerViewModel
+    let onOpenPlayer: () -> Void
+    let onDismiss: () -> Void
     
     var body: some View {
-        HStack(spacing: 0) {
-            ForEach(tabs, id: \.tag) { item in
-                let isSelected = selectedTab == item.tag
-                Button(action: {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                        selectedTab = item.tag
-                    }
-                }) {
-                    VStack(spacing: 3) {
-                        Image(systemName: item.icon)
-                            .font(.system(size: 19, weight: isSelected ? .bold : .medium))
-                            .foregroundColor(isSelected ? LiquidGlassTheme.leftHandCyan : .white.opacity(0.6))
+        HStack(spacing: 12) {
+            // Tap area for opening player
+            Button(action: onOpenPlayer) {
+                HStack(spacing: 12) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.accentColor.opacity(0.15))
+                            .frame(width: 40, height: 40)
                         
-                        Text(item.label)
-                            .font(.system(size: 10, weight: isSelected ? .bold : .regular, design: .rounded))
-                            .foregroundColor(isSelected ? LiquidGlassTheme.leftHandCyan : .white.opacity(0.6))
+                        Image(systemName: "music.note")
+                            .font(.system(size: 18))
+                            .foregroundColor(.accentColor)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-                    .background(
-                        isSelected ?
-                            Capsule().fill(LiquidGlassTheme.leftHandCyan.opacity(0.15)) :
-                            Capsule().fill(Color.clear)
-                    )
-                    .glowing(color: LiquidGlassTheme.leftHandCyan, radius: 8, active: isSelected)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(viewModel.currentScore.title)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundColor(.primary)
+                            .lineLimit(1)
+                        
+                        Text(viewModel.currentScore.composer)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
                 }
-                .buttonStyle(SpringPressStyle())
             }
+            .buttonStyle(.plain)
+            
+            Spacer()
+            
+            // Play / Pause Toggle
+            Button(action: {
+                viewModel.togglePlayPause()
+            }) {
+                Image(systemName: viewModel.isPlaying ? "pause.fill" : "play.fill")
+                    .font(.system(size: 20))
+                    .foregroundColor(.primary)
+                    .frame(width: 36, height: 36)
+            }
+            .buttonStyle(.plain)
+            
+            // Close / Stop button
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.secondary)
+                    .frame(width: 28, height: 28)
+            }
+            .buttonStyle(.plain)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .liquidGlass(
-            cornerRadius: 28,
-            tintColor: LiquidGlassTheme.midnightBackground.opacity(0.85),
-            borderGradient: LiquidGlassTheme.specularRimGradient,
-            shadowRadius: 16
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(.regularMaterial)
+                .shadow(color: Color.black.opacity(0.12), radius: 10, y: 4)
         )
     }
 }

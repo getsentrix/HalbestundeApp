@@ -2,7 +2,8 @@
 //  SettingsView.swift
 //  HalbestundeApp
 //
-//  App preferences, audio engine settings, and soundfont management.
+//  Clean, minimal native iOS settings view with inset grouped list styling.
+//  Configures audio engine acoustics, OMR recognition filters, and app preferences.
 //
 
 import SwiftUI
@@ -12,8 +13,6 @@ public struct SettingsView: View {
     @AppStorage("hapticsEnabled") private var hapticsEnabled: Bool = true
     @AppStorage("audioLatencyLow") private var audioLatencyLow: Bool = true
     @AppStorage("omrSensitivityHigh") private var omrSensitivityHigh: Bool = true
-    @State private var showingSoundfontImporter: Bool = false
-    @State private var soundfontStatus: String = "Procedural Grand Piano Active (Physical Acoustic Model)"
     
     public init(audioEngine: PianoAudioEngine = .shared) {
         self.audioEngine = audioEngine
@@ -21,89 +20,88 @@ public struct SettingsView: View {
     
     public var body: some View {
         NavigationStack {
-            ZStack {
-                LiquidGlassTheme.ambientConcertBackdrop
-                
-                ScrollView {
-                    VStack(spacing: 20) {
-                        // Audio Engine Section
-                        GlassCard {
-                            VStack(alignment: .leading, spacing: 14) {
-                                Label("Audio Engine & Acoustics", systemImage: "speaker.wave.3.fill")
-                                    .font(.headline)
-                                    .foregroundColor(.white)
-                                
-                                HStack {
-                                    Text("Master Volume")
-                                        .font(.subheadline)
-                                        .foregroundColor(.white.opacity(0.8))
-                                    Spacer()
-                                    Text("\(Int(audioEngine.masterVolume * 100))%")
-                                        .font(.subheadline.bold())
-                                        .foregroundColor(LiquidGlassTheme.leftHandCyan)
-                                }
-                                Slider(value: $audioEngine.masterVolume, in: 0...1)
-                                    .tint(LiquidGlassTheme.leftHandCyan)
-                                
-                                Divider().background(Color.white.opacity(0.2))
-                                
-                                Toggle("Ultra-Low Audio Latency Buffer", isOn: $audioLatencyLow)
-                                    .tint(LiquidGlassTheme.emeraldGreen)
-                                
-                                Text("Acoustic Model: \(soundfontStatus)")
-                                    .font(.caption)
-                                    .foregroundColor(.white.opacity(0.6))
-                            }
+            List {
+                // Audio Engine Section
+                Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Master Volume")
+                            Spacer()
+                            Text("\(Int(audioEngine.masterVolume * 100))%")
+                                .foregroundColor(.secondary)
+                                .monospacedDigit()
                         }
                         
-                        // Scanner & OMR Section
-                        GlassCard {
-                            VStack(alignment: .leading, spacing: 14) {
-                                Label("Optical Music Recognition (OMR)", systemImage: "viewfinder")
-                                    .font(.headline)
-                                    .foregroundColor(.white)
-                                
-                                Toggle("High-Sensitivity Notehead Filter", isOn: $omrSensitivityHigh)
-                                    .tint(LiquidGlassTheme.rightHandAmber)
-                                
-                                Text("Uses Apple Vision contour detection and horizontal staff projection to recognize staves, accidentals, and rhythms.")
-                                    .font(.caption)
-                                    .foregroundColor(.white.opacity(0.6))
-                            }
-                        }
-                        
-                        // Haptics & Feel
-                        GlassCard {
-                            VStack(alignment: .leading, spacing: 14) {
-                                Label("Touch & Keyboard Response", systemImage: "hand.tap.fill")
-                                    .font(.headline)
-                                    .foregroundColor(.white)
-                                
-                                Toggle("Haptic Key Feedback", isOn: $hapticsEnabled)
-                                    .tint(LiquidGlassTheme.leftHandCyan)
-                            }
-                        }
-                        
-                        // About Section
-                        GlassCard {
-                            VStack(alignment: .leading, spacing: 10) {
-                                Label("About Halbestunde iOS", systemImage: "info.circle.fill")
-                                    .font(.headline)
-                                    .foregroundColor(.white)
-                                
-                                Text("Version 1.0.0 • Pure Native Swift & SwiftUI")
-                                    .font(.subheadline)
-                                    .foregroundColor(.white.opacity(0.8))
-                                
-                                Text("Powered by Apple Vision, AVAudioEngine, and Liquid Glass Design System.")
-                                    .font(.caption)
-                                    .foregroundColor(.white.opacity(0.6))
-                            }
+                        HStack(spacing: 8) {
+                            Image(systemName: "speaker.fill")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            
+                            Slider(value: $audioEngine.masterVolume, in: 0...1)
+                                .tint(.accentColor)
+                            
+                            Image(systemName: "speaker.wave.3.fill")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
                         }
                     }
-                    .padding(20)
+                    .padding(.vertical, 4)
+                    
+                    Toggle("Low-Latency Audio Buffer", isOn: $audioLatencyLow)
+                    
+                    LabeledContent("Acoustic Model", value: "Procedural Grand Piano")
+                } header: {
+                    Text("Audio & Acoustics")
+                } footer: {
+                    Text("Real-time physical acoustic model using high-resolution harmonic sine synthesis and polyphonic envelope shaping.")
+                }
+                
+                // OMR Section
+                Section {
+                    Toggle("High-Sensitivity Notehead Filter", isOn: $omrSensitivityHigh)
+                } header: {
+                    Text("Optical Music Recognition (OMR)")
+                } footer: {
+                    Text("Uses Apple Vision contour detection and horizontal staff projection to recognize staves, accidentals, and rhythms from sheet music.")
+                }
+                
+                // Haptics Section
+                Section {
+                    Toggle("Haptic Feedback", isOn: $hapticsEnabled)
+                } header: {
+                    Text("Haptics & Touch")
+                }
+                
+                // About Section
+                Section {
+                    HStack(spacing: 14) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(Color.accentColor.opacity(0.15))
+                                .frame(width: 48, height: 48)
+                            
+                            Image(systemName: "music.note.tv.fill")
+                                .font(.system(size: 24))
+                                .foregroundColor(.accentColor)
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Halbestunde iOS")
+                                .font(.headline)
+                            Text("Version 1.0.0 (Build 1)")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                    
+                    LabeledContent("Architecture", value: "Pure Native Swift & SwiftUI")
+                    LabeledContent("Compatibility", value: "iOS 17.0+ • iPhone & iPad")
+                } header: {
+                    Text("About")
                 }
             }
+            .listStyle(.insetGrouped)
             .navigationTitle("Settings")
         }
     }

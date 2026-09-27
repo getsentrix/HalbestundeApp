@@ -212,4 +212,13 @@ public final class ScorePlayerViewModel: ObservableObject {
         let secs = Int(seconds) % 60
         return String(format: "%d:%02d", mins, secs)
     }
+    
+    public var formattedRemainingTime: String {
+        let total = currentScore.durationSeconds(at: tempoBPM)
+        let current = (currentBeat / tempoBPM) * 60.0
+        let remaining = max(0.0, total - current)
+        let mins = Int(remaining) / 60
+        let secs = Int(remaining) % 60
+        return String(format: "-%d:%02d", mins, secs)
+    }
 }

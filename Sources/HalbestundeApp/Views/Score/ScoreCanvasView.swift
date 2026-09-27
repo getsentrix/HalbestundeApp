@@ -47,12 +47,11 @@ public struct ScoreCanvasView: View {
                 .padding(.vertical, 10)
                 .background(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(LiquidGlassTheme.deepSlate.opacity(0.85))
-                        .background(RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial))
+                        .fill(Color(.secondarySystemGroupedBackground))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(LiquidGlassTheme.specularRimGradient, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color(.separator).opacity(0.5), lineWidth: 1)
                 )
             }
             .onChange(of: viewModel.currentMeasureIndex) { _, newMeasure in
@@ -72,13 +71,13 @@ private struct ScoreHeaderView: View {
             // Treble clef
             Text(Clef.treble.symbol)
                 .font(.system(size: 38, weight: .regular, design: .serif))
-                .foregroundColor(.white.opacity(0.85))
+                .foregroundColor(.primary.opacity(0.85))
                 .offset(y: 4)
             
             // Bass clef
             Text(Clef.bass.symbol)
                 .font(.system(size: 32, weight: .regular, design: .serif))
-                .foregroundColor(.white.opacity(0.85))
+                .foregroundColor(.primary.opacity(0.85))
                 .offset(y: -4)
         }
     }
@@ -107,10 +106,10 @@ private struct MeasureView: View {
                 // Active measure / Loop background highlight
                 if isInLoopRange {
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(LiquidGlassTheme.leftHandCyan.opacity(0.08))
+                        .fill(Color.accentColor.opacity(0.12))
                         .overlay(
                             RoundedRectangle(cornerRadius: 8)
-                                .stroke(LiquidGlassTheme.leftHandCyan.opacity(0.3), lineWidth: 1)
+                                .stroke(Color.accentColor.opacity(0.35), lineWidth: 1)
                         )
                 }
                 
@@ -118,12 +117,12 @@ private struct MeasureView: View {
                 VStack(spacing: 34) {
                     // Treble Staff (5 lines)
                     StaffLinesShape(spacing: staffSpacing)
-                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                        .stroke(Color.secondary.opacity(0.35), lineWidth: 1)
                         .frame(height: staffSpacing * 4)
                     
                     // Bass Staff (5 lines)
                     StaffLinesShape(spacing: staffSpacing)
-                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                        .stroke(Color.secondary.opacity(0.35), lineWidth: 1)
                         .frame(height: staffSpacing * 4)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -131,7 +130,7 @@ private struct MeasureView: View {
                 // Measure index badge
                 Text("\(measure.index + 1)")
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundColor(isCurrentMeasure ? LiquidGlassTheme.rightHandAmber : .white.opacity(0.4))
+                    .foregroundColor(isCurrentMeasure ? Color.accentColor : Color.secondary.opacity(0.5))
                     .padding(4)
                     .offset(x: 4, y: 4)
                 
@@ -149,7 +148,7 @@ private struct MeasureView: View {
                 
                 // Measure right barline
                 Rectangle()
-                    .fill(Color.white.opacity(0.4))
+                    .fill(Color(.separator))
                     .frame(width: 1)
                     .frame(maxHeight: .infinity)
                     .offset(x: geo.size.width - 1)
@@ -169,25 +168,13 @@ private struct MeasureView: View {
 private struct PlayheadCursorView: View {
     var body: some View {
         ZStack {
-            // Glowing neon beam
             Rectangle()
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            LiquidGlassTheme.rightHandAmber,
-                            LiquidGlassTheme.leftHandCyan
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .frame(width: 2.5)
-                .glowing(color: LiquidGlassTheme.rightHandAmber, radius: 8)
+                .fill(Color.accentColor)
+                .frame(width: 2)
             
-            // Top jewel pip
             Circle()
-                .fill(LiquidGlassTheme.rightHandAmber)
-                .frame(width: 8, height: 8)
+                .fill(Color.accentColor)
+                .frame(width: 7, height: 7)
                 .offset(y: -75)
         }
     }
@@ -219,7 +206,8 @@ private struct NoteGlyphView: View {
     
     var body: some View {
         if !note.isRest {
-            let noteColor = note.hand == .right ? LiquidGlassTheme.rightHandAmber : LiquidGlassTheme.leftHandCyan
+            let activeColor = Color.accentColor
+            let restingColor = Color.primary.opacity(0.85)
             let relativeBeat = note.startBeat - measure.startBeat
             let xOffset = 25.0 + (measureWidth - 45.0) * CGFloat(relativeBeat / measure.durationBeats)
             let yOffset = calculateYOffset()
@@ -227,14 +215,13 @@ private struct NoteGlyphView: View {
             ZStack {
                 // Notehead ellipse
                 Ellipse()
-                    .fill(isActive ? noteColor : Color.white.opacity(0.9))
+                    .fill(isActive ? activeColor : restingColor)
                     .frame(width: 12, height: 9)
                     .rotationEffect(.degrees(-18))
-                    .glowing(color: noteColor, radius: 10, active: isActive)
                 
                 // Stem
                 Rectangle()
-                    .fill(isActive ? noteColor : Color.white.opacity(0.85))
+                    .fill(isActive ? activeColor : restingColor)
                     .frame(width: 1.5, height: 26)
                     .offset(x: 5, y: -13)
             }
