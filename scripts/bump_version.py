@@ -130,6 +130,8 @@ def main():
 
     apps_json_path = os.path.join(REPO_ROOT, "apps.json")
     docs_apps_json_path = os.path.join(REPO_ROOT, "docs", "apps.json")
+    altstore_json_path = os.path.join(REPO_ROOT, "altstore.json")
+    docs_altstore_json_path = os.path.join(REPO_ROOT, "docs", "altstore.json")
     plist_path = os.path.join(REPO_ROOT, "Sources", "PianoGlass", "App", "Info.plist")
     pbxproj_path = os.path.join(REPO_ROOT, "PianoGlass.xcodeproj", "project.pbxproj")
     docs_index_path = os.path.join(REPO_ROOT, "docs", "index.html")
@@ -144,6 +146,10 @@ def main():
             data["apps"][0]["size"] = args.set_size
             save_json(apps_json_path, data)
             save_json(docs_apps_json_path, data)
+            if os.path.exists(altstore_json_path):
+                save_json(altstore_json_path, data)
+            if os.path.exists(docs_altstore_json_path):
+                save_json(docs_altstore_json_path, data)
         print(f"Updated IPA size to {args.set_size} bytes.")
         return
 
@@ -187,6 +193,10 @@ def main():
 
     save_json(apps_json_path, data)
     save_json(docs_apps_json_path, data)
+    if os.path.exists(altstore_json_path):
+        save_json(altstore_json_path, data)
+    if os.path.exists(docs_altstore_json_path):
+        save_json(docs_altstore_json_path, data)
 
     # 2. Update Info.plist
     update_info_plist(plist_path, new_version, build_num)

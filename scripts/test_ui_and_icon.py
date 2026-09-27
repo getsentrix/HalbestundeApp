@@ -12,7 +12,7 @@ import plistlib
 from PIL import Image
 
 def test_app_icon():
-    print("[Test 1/3] Validating AppIcon Catalog & Resolutions...")
+    print("[Test 1/4] Validating AppIcon Catalog & Resolutions...")
     catalog_path = "Sources/PianoGlass/Resources/Assets.xcassets/AppIcon.appiconset"
     contents_file = os.path.join(catalog_path, "Contents.json")
     assert os.path.exists(contents_file), "Contents.json missing"
@@ -51,7 +51,7 @@ def test_app_icon():
     print("  [OK] All 18 AppIcon PNGs verified: dimensions, 100% opaque RGB, and actool spec confirmed.")
 
 def test_project_and_plist():
-    print("[Test 2/3] Validating project.pbxproj & Info.plist icon integration...")
+    print("[Test 2/4] Validating project.pbxproj & Info.plist icon integration...")
     pbx_path = "PianoGlass.xcodeproj/project.pbxproj"
     with open(pbx_path, "r", encoding="utf-8") as f:
         pbx = f.read()
@@ -70,7 +70,7 @@ def test_project_and_plist():
     print("  [OK] project.pbxproj & Info.plist correctly linked to AppIcon asset catalog.")
 
 def test_ui_components():
-    print("[Test 3/3] Validating Feather-inspired minimal UI components...")
+    print("[Test 3/4] Validating Feather-inspired minimal UI components...")
     
     # 1. ScorePlayerView
     player_path = "Sources/PianoGlass/Views/ScorePlayerView.swift"
@@ -120,8 +120,37 @@ def test_ui_components():
     
     print("  [OK] All UI overhaul checks PASSED: complete Feather-style native iOS design confirmed.")
 
+def test_pianoglass_branding_and_ipa_cleanliness():
+    print("[Test 4/4] Validating PianoGlass branding across project, manifests, and IPAs...")
+    import zipfile
+    
+    # 1. Check manifests
+    for manifest_path in ["apps.json", "docs/apps.json", "altstore.json", "docs/altstore.json"]:
+        if os.path.exists(manifest_path):
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            assert "halbestunde" not in content.lower(), f"Found halbestunde in {manifest_path}"
+            assert "com.pianoglass.app" in content, f"Missing bundle ID in {manifest_path}"
+            assert '"name": "PianoGlass"' in content, f"Missing app name in {manifest_path}"
+            
+    # 2. Check IPAs
+    for ipa_path in ["PianoGlass.ipa", "PianoGlass-IPA/PianoGlass.ipa"]:
+        if os.path.exists(ipa_path):
+            with zipfile.ZipFile(ipa_path, "r") as z:
+                # Info.plist
+                plist_raw = z.read("Payload/PianoGlass.app/Info.plist")
+                pl = plistlib.loads(plist_raw)
+                assert pl.get("CFBundleDisplayName") == "PianoGlass"
+                assert pl.get("CFBundleName") == "PianoGlass"
+                assert pl.get("CFBundleIdentifier") == "com.pianoglass.app"
+                assert "halbestunde" not in pl.get("NSCameraUsageDescription", "").lower()
+                assert "halbestunde" not in pl.get("NSPhotoLibraryUsageDescription", "").lower()
+                
+    print("  [OK] All PianoGlass branding and IPA bundle integrity checks PASSED.")
+
 if __name__ == "__main__":
     test_app_icon()
     test_project_and_plist()
     test_ui_components()
+    test_pianoglass_branding_and_ipa_cleanliness()
     print("\nALL VERIFICATION TESTS COMPLETED SUCCESSFULLY!")

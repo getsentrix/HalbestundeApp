@@ -10,14 +10,14 @@
       "name": "PianoGlass",
       "bundleIdentifier": "com.pianoglass.app",
       "developerName": "Dylan",
-      "version": "1.0.0",
-      "versionDate": "2026-09-27T04:00:00Z",
-      "versionDescription": "Initial v1.0.0 Release:\n\u2022 Liquid Glass (Glassmorphism) UI with .ultraThinMaterial and specular rim glows\n\u2022 Camera sheet music scanner with Optical Music Recognition (OMR)\n\u2022 Physical modeling polyphonic acoustic grand piano audio engine\n\u2022 Interactive score canvas with synchronized animated playhead\n\u2022 61/88-key lighted virtual piano keyboard with dual-hand color cues\n\u2022 Practice suite: A-B looping, tempo slider (40-240 BPM), transposition, LH/RH isolation\n\u2022 Preloaded classical repertoire (F\u00fcr Elise, Moonlight Sonata, Minuet in G, Chopin Nocturne)",
-      "downloadURL": "https://github.com/getsentrix/PianoGlass/releases/download/v1.0.0/PianoGlass.ipa",
+      "version": "1.0.2",
+      "versionDate": "2026-09-27T05:11:33Z",
+      "versionDescription": "Release v1.0.2:\n\u2022 Sheet music scanner with camera capture and photo import\n\u2022 On-device acoustic grand piano audio engine\n\u2022 Minimal player with scrub bar, tempo slider, and looping\n\u2022 Score library with secure local storage",
+      "downloadURL": "https://github.com/getsentrix/PianoGlass/releases/download/v1.0.2/PianoGlass.ipa",
       "localizedDescription": "PianoGlass turns sheet music into playable audio with Apple Vision OMR and native audio playback in a distraction-free, minimal iOS interface.",
       "iconURL": "https://getsentrix.github.io/PianoGlass/assets/app-icon.png",
       "tintColor": "00E5FF",
-      "size": 717059,
+      "size": 716904,
       "minOSVersion": "17.0",
       "screenshots": [
         "https://getsentrix.github.io/PianoGlass/assets/screenshot-player.png",
@@ -26,17 +26,17 @@
       "appPermissions": {
         "entitlements": [],
         "privacy": {
-          "NSCameraUsageDescription": "PianoGlass requires camera access to scan piano sheet music."
+          "NSCameraUsageDescription": "PianoGlass requires camera access to scan sheet music."
         }
       }
     }
   ],
   "news": [
     {
-      "title": "PianoGlass v1.0.0 is Live!",
-      "identifier": "pianoglass-v100-announcement",
-      "caption": "Scan sheet music & practice with Liquid Glass UI",
-      "date": "2026-09-27T04:00:00Z",
+      "title": "PianoGlass v1.0.2 Available",
+      "identifier": "pianoglass-v102-release",
+      "caption": "Scan sheet music with minimal native iOS UI",
+      "date": "2026-09-27T05:11:33Z",
       "tintColor": "00E5FF",
       "appID": "com.pianoglass.app",
       "notify": true

@@ -17,7 +17,7 @@
       "localizedDescription": "PianoGlass turns sheet music into playable audio with Apple Vision OMR and native audio playback in a distraction-free, minimal iOS interface.",
       "iconURL": "https://getsentrix.github.io/PianoGlass/assets/app-icon.png",
       "tintColor": "00E5FF",
-      "size": 717059,
+      "size": 716904,
       "minOSVersion": "17.0",
       "screenshots": [
         "https://getsentrix.github.io/PianoGlass/assets/screenshot-player.png",

@@ -119,7 +119,7 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add apps.json docs/apps.json docs/index.html index.html Sources/PianoGlass/App/Info.plist PianoGlass.xcodeproj/project.pbxproj
+          git add apps.json docs/apps.json altstore.json docs/altstore.json docs/index.html index.html Sources/PianoGlass/App/Info.plist PianoGlass.xcodeproj/project.pbxproj
           git commit -m "chore(release): bump version to $TAG [skip ci]" || echo "No changes to commit"
           git pull --rebase origin master
           git push origin master
