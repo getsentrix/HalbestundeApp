@@ -67,7 +67,7 @@ public final class MusicScannerService: ObservableObject {
         let (deskewedImage, _) = VisionStaffDetector.deskewCGImage(cgImage)
         let workingImage = deskewedImage
         
-        // 0. Tier 1: Direct On-Device Multimodal AI with Gemini 2.0 Flash
+        // 0. Tier 1: Direct On-Device Multimodal AI with Gemini 3.8 Flash / 3.5 Flash-Lite
         let geminiKey = UserDefaults.standard.string(forKey: "geminiAPIKey")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !geminiKey.isEmpty, let jpegData = cgImageToJPEGData(workingImage, maxDimension: 2048) {
             do {
@@ -245,7 +245,7 @@ public final class MusicScannerService: ObservableObject {
         let startTime = Date()
         let geminiKey = UserDefaults.standard.string(forKey: "geminiAPIKey")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         
-        // Tier 1: Direct On-Device Multimodal AI with Gemini 2.0 Flash
+        // Tier 1: Direct On-Device Multimodal AI with Gemini 3.8 Flash / 3.5 Flash-Lite
         if !geminiKey.isEmpty {
             do {
                 await updateState(.enhancingContrast, progress: 0.20)
@@ -361,10 +361,12 @@ public final class MusicScannerService: ObservableObject {
         let boundary = "Boundary-\(UUID().uuidString)"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         
-        // Attach Gemini API key header if configured
+        // Attach Gemini API key and model headers if configured
         let geminiKey = UserDefaults.standard.string(forKey: "geminiAPIKey")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let geminiModel = UserDefaults.standard.string(forKey: "geminiModel") ?? "gemini-3.8-flash"
         if !geminiKey.isEmpty {
             request.setValue(geminiKey, forHTTPHeaderField: "X-Gemini-API-Key")
+            request.setValue(geminiModel, forHTTPHeaderField: "X-Gemini-Model")
         }
         
         var body = Data()
@@ -374,11 +376,15 @@ public final class MusicScannerService: ObservableObject {
         body.append("Content-Disposition: form-data; name=\"title\"\r\n\r\n".data(using: .utf8)!)
         body.append("\(scoreTitle)\r\n".data(using: .utf8)!)
         
-        // Add gemini_api_key form field if present
+        // Add gemini_api_key and gemini_model form fields if present
         if !geminiKey.isEmpty {
             body.append("--\(boundary)\r\n".data(using: .utf8)!)
             body.append("Content-Disposition: form-data; name=\"gemini_api_key\"\r\n\r\n".data(using: .utf8)!)
             body.append("\(geminiKey)\r\n".data(using: .utf8)!)
+            
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"gemini_model\"\r\n\r\n".data(using: .utf8)!)
+            body.append("\(geminiModel)\r\n".data(using: .utf8)!)
         }
         
         // Add file field
@@ -435,7 +441,45 @@ public final class MusicScannerService: ObservableObject {
         apiKey: String,
         scoreTitle: String
     ) async throws -> Score? {
-        guard let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=\(apiKey)") else {
+        let preferredModel = UserDefaults.standard.string(forKey: "geminiModel") ?? "gemini-3.8-flash"
+        let fallbackModel = (preferredModel == "gemini-3.8-flash") ? "gemini-3.5-flash-lite" : "gemini-3.8-flash"
+        
+        let candidateModels = [preferredModel, fallbackModel]
+        var lastError: Error?
+        
+        for model in candidateModels {
+            do {
+                if let score = try await executeGeminiRequest(
+                    data: data,
+                    mimeType: mimeType,
+                    apiKey: apiKey,
+                    scoreTitle: scoreTitle,
+                    model: model
+                ) {
+                    return score
+                }
+            } catch {
+                #if DEBUG
+                print("[MusicScannerService] Gemini model '\(model)' returned: \(error.localizedDescription). Trying next candidate if available.")
+                #endif
+                lastError = error
+            }
+        }
+        
+        if let err = lastError {
+            throw err
+        }
+        return nil
+    }
+    
+    private func executeGeminiRequest(
+        data: Data,
+        mimeType: String,
+        apiKey: String,
+        scoreTitle: String,
+        model: String
+    ) async throws -> Score? {
+        guard let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent?key=\(apiKey)") else {
             throw URLError(.badURL)
         }
         
@@ -477,7 +521,7 @@ public final class MusicScannerService: ObservableObject {
         let (responseData, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
             let code = (response as? HTTPURLResponse)?.statusCode ?? -1
-            throw NSError(domain: "PianoGlassOMR", code: code, userInfo: [NSLocalizedDescriptionKey: "Gemini API returned HTTP \(code)"])
+            throw NSError(domain: "PianoGlassOMR", code: code, userInfo: [NSLocalizedDescriptionKey: "Gemini API (\(model)) returned HTTP \(code)"])
         }
         
         guard let json = try JSONSerialization.jsonObject(with: responseData, options: []) as? [String: Any],

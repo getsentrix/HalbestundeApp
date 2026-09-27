@@ -297,10 +297,14 @@ def run_oemer_transcription(image: Image.Image, output_dir: str) -> Optional[str
     return None
 
 
-def run_cloud_ai_transcription(image: Image.Image, gemini_key: Optional[str] = None) -> Optional[str]:
+def run_cloud_ai_transcription(
+    image: Image.Image,
+    gemini_key: Optional[str] = None,
+    model_name: Optional[str] = None
+) -> Optional[str]:
     """
-    Cloud Multimodal AI OMR fallback: uses Google Gemini or OpenAI vision models
-    to transcribe high-definition sheet music scans into pristine MusicXML 3.1.
+    Cloud Multimodal AI OMR fallback: uses Google Gemini (Gemini 3.8 Flash / 3.5 Flash-Lite)
+    or OpenAI vision models to transcribe high-definition sheet music scans into pristine MusicXML 3.1.
     Activates when gemini_key is provided or GEMINI_API_KEY, GOOGLE_API_KEY, OPENAI_API_KEY is present.
     """
     active_gemini_key = gemini_key or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
@@ -308,8 +312,11 @@ def run_cloud_ai_transcription(image: Image.Image, gemini_key: Optional[str] = N
     
     # 1. Google Gemini Multimodal Vision OMR
     if active_gemini_key:
+        preferred_model = model_name or os.environ.get("GEMINI_MODEL") or "gemini-3.8-flash"
+        fallback_model = "gemini-3.5-flash-lite" if preferred_model == "gemini-3.8-flash" else "gemini-3.8-flash"
+        models_to_try = [preferred_model, fallback_model]
+        
         try:
-            logger.info("Invoking Google Gemini Cloud AI OMR engine...")
             buf = io.BytesIO()
             # Normalize to 2048px max dimension for fast transmission and clear notation
             w, h = image.size
@@ -349,32 +356,37 @@ def run_cloud_ai_transcription(image: Image.Image, gemini_key: Optional[str] = N
                 }
             }
             
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={active_gemini_key}"
-            req = urllib.request.Request(
-                url,
-                data=json.dumps(payload).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
-                method="POST"
-            )
-            with urllib.request.urlopen(req, timeout=35) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                candidates = data.get("candidates", [])
-                if candidates:
-                    parts = candidates[0].get("content", {}).get("parts", [])
-                    if parts:
-                        raw_text = parts[0].get("text", "").strip()
-                        # Clean markdown code fences if present
-                        if "```xml" in raw_text:
-                            raw_text = raw_text.split("```xml", 1)[1].split("```", 1)[0].strip()
-                        elif "```" in raw_text:
-                            raw_text = raw_text.split("```", 1)[1].split("```", 1)[0].strip()
-                        if "<score-partwise" in raw_text:
-                            # Validate xml structure
-                            ET.fromstring(raw_text)
-                            logger.info(f"Gemini Cloud AI OMR transcribed {len(raw_text)} bytes of MusicXML.")
-                            return raw_text
+            for candidate in models_to_try:
+                try:
+                    logger.info(f"Invoking Google Gemini Cloud AI OMR engine with model '{candidate}'...")
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{candidate}:generateContent?key={active_gemini_key}"
+                    req = urllib.request.Request(
+                        url,
+                        data=json.dumps(payload).encode("utf-8"),
+                        headers={"Content-Type": "application/json"},
+                        method="POST"
+                    )
+                    with urllib.request.urlopen(req, timeout=35) as resp:
+                        data = json.loads(resp.read().decode("utf-8"))
+                        candidates = data.get("candidates", [])
+                        if candidates:
+                            parts = candidates[0].get("content", {}).get("parts", [])
+                            if parts:
+                                raw_text = parts[0].get("text", "").strip()
+                                # Clean markdown code fences if present
+                                if "```xml" in raw_text:
+                                    raw_text = raw_text.split("```xml", 1)[1].split("```", 1)[0].strip()
+                                elif "```" in raw_text:
+                                    raw_text = raw_text.split("```", 1)[1].split("```", 1)[0].strip()
+                                if "<score-partwise" in raw_text:
+                                    # Validate xml structure
+                                    ET.fromstring(raw_text)
+                                    logger.info(f"Gemini Cloud AI OMR ({candidate}) transcribed {len(raw_text)} bytes of MusicXML.")
+                                    return raw_text
+                except Exception as candidate_err:
+                    logger.warning(f"Gemini model '{candidate}' failed: {candidate_err}")
         except Exception as e:
-            logger.warning(f"Gemini Cloud AI OMR failed: {e}")
+            logger.warning(f"Gemini Cloud AI OMR setup failed: {e}")
             
     # 2. OpenAI Multimodal Vision OMR
     if openai_key:
@@ -994,11 +1006,16 @@ class AdvancedVisionOMR:
 FallbackOMR = AdvancedVisionOMR
 
 
-def transcribe_image(image: Image.Image, title: str = "Sheet Music", gemini_api_key: Optional[str] = None) -> Tuple[str, str]:
+def transcribe_image(
+    image: Image.Image,
+    title: str = "Sheet Music",
+    gemini_api_key: Optional[str] = None,
+    gemini_model: Optional[str] = None
+) -> Tuple[str, str]:
     """
     Tiered OMR transcription orchestrator:
     0. Deskew and orientation normalization (Hough / Projection Profile Variance)
-    1. Cloud Multimodal AI (Gemini 2.0 Flash) - highest priority when key is present
+    1. Cloud Multimodal AI (Gemini 3.8 Flash / 3.5 Flash-Lite) - highest priority when key is present
     2. Audiveris (Dockerized or CLI)
     3. oemer (ONNX Deep Learning)
     4. AdvancedVisionOMR (High-accuracy local feature extraction)
@@ -1012,7 +1029,7 @@ def transcribe_image(image: Image.Image, title: str = "Sheet Music", gemini_api_
     # Priority Tier: Cloud Multimodal AI when user provides API key or env var is set
     active_cloud = bool(gemini_api_key) or CLOUD_AI_AVAILABLE
     if active_cloud:
-        cloud_xml = run_cloud_ai_transcription(image, gemini_key=gemini_api_key)
+        cloud_xml = run_cloud_ai_transcription(image, gemini_key=gemini_api_key, model_name=gemini_model)
         if cloud_xml:
             return cloud_xml, "cloud_ai_gemini"
 
@@ -1103,7 +1120,12 @@ def merge_music21_scores(scores: List[music21.stream.Score], title: str = "Sheet
     return merged
 
 
-def transcribe_document(images: List[Image.Image], title: str = "Sheet Music", gemini_api_key: Optional[str] = None) -> Tuple[str, str]:
+def transcribe_document(
+    images: List[Image.Image],
+    title: str = "Sheet Music",
+    gemini_api_key: Optional[str] = None,
+    gemini_model: Optional[str] = None
+) -> Tuple[str, str]:
     """
     End-to-end document transcription for single or multi-page sheet music.
     Processes each page, then merges into a complete, sequential MusicXML document.
@@ -1113,7 +1135,7 @@ def transcribe_document(images: List[Image.Image], title: str = "Sheet Music", g
         raise ValueError("No images provided for transcription.")
         
     if len(images) == 1:
-        return transcribe_image(images[0], title=title, gemini_api_key=gemini_api_key)
+        return transcribe_image(images[0], title=title, gemini_api_key=gemini_api_key, gemini_model=gemini_model)
         
     logger.info(f"Processing multi-page document ({len(images)} pages)...")
     page_scores: List[music21.stream.Score] = []
@@ -1121,7 +1143,7 @@ def transcribe_document(images: List[Image.Image], title: str = "Sheet Music", g
     
     for idx, page_img in enumerate(images):
         page_title = f"{title} - Page {idx + 1}"
-        page_xml, engine = transcribe_image(page_img, title=page_title, gemini_api_key=gemini_api_key)
+        page_xml, engine = transcribe_image(page_img, title=page_title, gemini_api_key=gemini_api_key, gemini_model=gemini_model)
         engines_used.add(engine)
         try:
             parsed_page = music21.converter.parseData(page_xml, format="musicxml")
