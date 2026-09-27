@@ -10,7 +10,7 @@ import os
 import uuid
 import logging
 from typing import Optional, Dict, Any
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -69,13 +69,15 @@ def health_check():
 
 @app.post("/api/transcribe")
 async def transcribe_sheet_music(
+    request: Request,
     file: UploadFile = File(...),
     title: Optional[str] = Form(None),
+    gemini_api_key: Optional[str] = Form(None),
 ):
     """
     Transcribes uploaded sheet music (PDF or Image) to MusicXML and Standard MIDI (.mid).
     1. Converts PDF pages to 300 DPI images (pdf2image / pypdf).
-    2. Runs neural symbol segmentation (oemer) or robust fallback OMR.
+    2. Runs neural symbol segmentation (Gemini 2.0 Flash / oemer) or robust fallback OMR.
     3. Parses MusicXML with music21 and exports Standard MIDI.
     4. Returns JSON with MusicXML, base64 MIDI, download URLs, and score metadata.
     """
@@ -91,7 +93,9 @@ async def transcribe_sheet_music(
     else:
         resolved_title = os.path.splitext(file.filename)[0].replace("_", " ").replace("-", " ").title()
     
-    logger.info(f"Received upload '{file.filename}' ({len(raw_bytes)} bytes). Title: '{resolved_title}'")
+    # Priority key from request form or HTTP header
+    active_key = gemini_api_key or request.headers.get("x-gemini-api-key") or request.headers.get("X-Gemini-API-Key")
+    logger.info(f"Received upload '{file.filename}' ({len(raw_bytes)} bytes). Title: '{resolved_title}', AI Key: {'Present' if active_key else 'None'}")
     
     # 1. Convert PDF or Image into PIL images
     try:
@@ -105,7 +109,7 @@ async def transcribe_sheet_music(
         
     # 2. Process all pages through OMR pipeline (single or multi-page concatenation)
     try:
-        musicxml_str, engine_used = transcribe_document(images, title=resolved_title)
+        musicxml_str, engine_used = transcribe_document(images, title=resolved_title, gemini_api_key=active_key)
     except ValueError as ve:
         logger.warning(f"OMR unreadable scan: {ve}")
         raise HTTPException(status_code=422, detail=str(ve))

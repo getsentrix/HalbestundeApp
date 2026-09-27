@@ -297,17 +297,17 @@ def run_oemer_transcription(image: Image.Image, output_dir: str) -> Optional[str
     return None
 
 
-def run_cloud_ai_transcription(image: Image.Image) -> Optional[str]:
+def run_cloud_ai_transcription(image: Image.Image, gemini_key: Optional[str] = None) -> Optional[str]:
     """
     Cloud Multimodal AI OMR fallback: uses Google Gemini or OpenAI vision models
     to transcribe high-definition sheet music scans into pristine MusicXML 3.1.
-    Activates when GEMINI_API_KEY, GOOGLE_API_KEY, or OPENAI_API_KEY is present.
+    Activates when gemini_key is provided or GEMINI_API_KEY, GOOGLE_API_KEY, OPENAI_API_KEY is present.
     """
-    gemini_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    active_gemini_key = gemini_key or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
     openai_key = os.environ.get("OPENAI_API_KEY")
     
     # 1. Google Gemini Multimodal Vision OMR
-    if gemini_key:
+    if active_gemini_key:
         try:
             logger.info("Invoking Google Gemini Cloud AI OMR engine...")
             buf = io.BytesIO()
@@ -349,7 +349,7 @@ def run_cloud_ai_transcription(image: Image.Image) -> Optional[str]:
                 }
             }
             
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={gemini_key}"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={active_gemini_key}"
             req = urllib.request.Request(
                 url,
                 data=json.dumps(payload).encode("utf-8"),
@@ -994,13 +994,13 @@ class AdvancedVisionOMR:
 FallbackOMR = AdvancedVisionOMR
 
 
-def transcribe_image(image: Image.Image, title: str = "Sheet Music") -> Tuple[str, str]:
+def transcribe_image(image: Image.Image, title: str = "Sheet Music", gemini_api_key: Optional[str] = None) -> Tuple[str, str]:
     """
     Tiered OMR transcription orchestrator:
     0. Deskew and orientation normalization (Hough / Projection Profile Variance)
-    1. Audiveris (Dockerized or CLI)
-    2. oemer (ONNX Deep Learning)
-    3. Cloud Multimodal AI (Gemini / OpenAI if API key set)
+    1. Cloud Multimodal AI (Gemini 2.0 Flash) - highest priority when key is present
+    2. Audiveris (Dockerized or CLI)
+    3. oemer (ONNX Deep Learning)
     4. AdvancedVisionOMR (High-accuracy local feature extraction)
     Returns: (musicxml_string, engine_name)
     """
@@ -1009,24 +1009,25 @@ def transcribe_image(image: Image.Image, title: str = "Sheet Music") -> Tuple[st
     if abs(angle) >= 0.15:
         image = deskewed_image
 
+    # Priority Tier: Cloud Multimodal AI when user provides API key or env var is set
+    active_cloud = bool(gemini_api_key) or CLOUD_AI_AVAILABLE
+    if active_cloud:
+        cloud_xml = run_cloud_ai_transcription(image, gemini_key=gemini_api_key)
+        if cloud_xml:
+            return cloud_xml, "cloud_ai_gemini"
+
     with tempfile.TemporaryDirectory() as tmp_dir:
-        # Tier 1: Audiveris
+        # Tier 2: Audiveris
         if AUDIVERIS_AVAILABLE:
             audiveris_xml = run_audiveris_transcription(image, tmp_dir)
             if audiveris_xml:
                 return audiveris_xml, "audiveris"
                 
-        # Tier 2: oemer
+        # Tier 3: oemer
         if OEMER_AVAILABLE:
             oemer_xml = run_oemer_transcription(image, tmp_dir)
             if oemer_xml:
                 return oemer_xml, "oemer"
-
-    # Tier 3: Cloud Multimodal AI
-    if CLOUD_AI_AVAILABLE:
-        cloud_xml = run_cloud_ai_transcription(image)
-        if cloud_xml:
-            return cloud_xml, "cloud_ai"
 
     # Tier 4: AdvancedVisionOMR
     logger.info("Using AdvancedVisionOMR feature extraction engine.")
@@ -1102,7 +1103,7 @@ def merge_music21_scores(scores: List[music21.stream.Score], title: str = "Sheet
     return merged
 
 
-def transcribe_document(images: List[Image.Image], title: str = "Sheet Music") -> Tuple[str, str]:
+def transcribe_document(images: List[Image.Image], title: str = "Sheet Music", gemini_api_key: Optional[str] = None) -> Tuple[str, str]:
     """
     End-to-end document transcription for single or multi-page sheet music.
     Processes each page, then merges into a complete, sequential MusicXML document.
@@ -1112,7 +1113,7 @@ def transcribe_document(images: List[Image.Image], title: str = "Sheet Music") -
         raise ValueError("No images provided for transcription.")
         
     if len(images) == 1:
-        return transcribe_image(images[0], title=title)
+        return transcribe_image(images[0], title=title, gemini_api_key=gemini_api_key)
         
     logger.info(f"Processing multi-page document ({len(images)} pages)...")
     page_scores: List[music21.stream.Score] = []
@@ -1120,7 +1121,7 @@ def transcribe_document(images: List[Image.Image], title: str = "Sheet Music") -
     
     for idx, page_img in enumerate(images):
         page_title = f"{title} - Page {idx + 1}"
-        page_xml, engine = transcribe_image(page_img, title=page_title)
+        page_xml, engine = transcribe_image(page_img, title=page_title, gemini_api_key=gemini_api_key)
         engines_used.add(engine)
         try:
             parsed_page = music21.converter.parseData(page_xml, format="musicxml")

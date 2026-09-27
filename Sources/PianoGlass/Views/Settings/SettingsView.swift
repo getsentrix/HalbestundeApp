@@ -14,6 +14,10 @@ public struct SettingsView: View {
     @AppStorage("enhanceScanContrast") private var enhanceScanContrast: Bool = true
     @AppStorage("omrBackendURL") private var omrBackendURL: String = "http://localhost:8000"
     @AppStorage("useRemoteOMR") private var useRemoteOMR: Bool = true
+    @AppStorage("geminiAPIKey") private var geminiAPIKey: String = ""
+    @State private var isShowingAPIKey: Bool = false
+    @State private var isTestingGeminiKey: Bool = false
+    @State private var geminiTestStatus: String? = nil
     @State private var isTestingConnection: Bool = false
     @State private var testStatus: String? = nil
     
@@ -94,6 +98,74 @@ public struct SettingsView: View {
                     Text("Scanner & Recognition")
                 } footer: {
                     Text("Connects to Python OMR backend (oemer + music21). On physical iPhone, enter your computer's local WiFi IP (e.g. http://192.168.x.x:8000). Falls back to on-device recognition when offline.")
+                }
+                
+                // Neural AI Recognition Section
+                Section {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Google Gemini API Key")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        
+                        HStack {
+                            if isShowingAPIKey {
+                                TextField("AIzaSy...", text: $geminiAPIKey)
+                                    .textFieldStyle(.roundedBorder)
+                                    .autocorrectionDisabled()
+                                    .textInputAutocapitalization(.never)
+                            } else {
+                                SecureField("AIzaSy...", text: $geminiAPIKey)
+                                    .textFieldStyle(.roundedBorder)
+                                    .autocorrectionDisabled()
+                                    .textInputAutocapitalization(.never)
+                            }
+                            
+                            Button {
+                                isShowingAPIKey.toggle()
+                            } label: {
+                                Image(systemName: isShowingAPIKey ? "eye.slash" : "eye")
+                                    .foregroundColor(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        
+                        HStack {
+                            Button(action: testGeminiKey) {
+                                HStack(spacing: 6) {
+                                    if isTestingGeminiKey {
+                                        ProgressView()
+                                            .controlSize(.small)
+                                    } else {
+                                        Image(systemName: "sparkles")
+                                    }
+                                    Text("Verify Key")
+                                }
+                            }
+                            .disabled(isTestingGeminiKey || geminiAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            
+                            Spacer()
+                            
+                            Link(destination: URL(string: "https://aistudio.google.com/app/apikey")!) {
+                                HStack(spacing: 4) {
+                                    Text("Get Free Key")
+                                    Image(systemName: "arrow.up.right")
+                                }
+                                .font(.caption)
+                            }
+                        }
+                        .padding(.top, 2)
+                        
+                        if let status = geminiTestStatus {
+                            Text(status)
+                                .font(.caption)
+                                .foregroundColor(status.contains("Active") ? .green : .red)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                } header: {
+                    Text("Neural Music Recognition (AI)")
+                } footer: {
+                    Text("Uses Google Gemini 2.0 Flash to transcribe complex polyphonic piano sheet music with exact chords, accidentals, and measures. Free API keys are available at Google AI Studio.")
                 }
                 
                 // Touch & Feedback
@@ -209,6 +281,51 @@ public struct SettingsView: View {
                 await MainActor.run {
                     self.testStatus = "Unreachable. Ensure server is running on PC."
                     self.isTestingConnection = false
+                }
+            }
+        }
+    }
+    
+    private func testGeminiKey() {
+        let key = geminiAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else {
+            geminiTestStatus = "Key cannot be empty"
+            return
+        }
+        guard let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models?key=\(key)") else {
+            geminiTestStatus = "Invalid URL"
+            return
+        }
+        isTestingGeminiKey = true
+        geminiTestStatus = nil
+        
+        Task {
+            do {
+                var request = URLRequest(url: url)
+                request.timeoutInterval = 8.0
+                let (data, response) = try await URLSession.shared.data(for: request)
+                if let httpResp = response as? HTTPURLResponse {
+                    if httpResp.statusCode == 200 {
+                        await MainActor.run {
+                            self.geminiTestStatus = "Active: Key verified successfully"
+                            self.isTestingGeminiKey = false
+                        }
+                    } else {
+                        let _ = String(data: data, encoding: .utf8)
+                        await MainActor.run {
+                            if httpResp.statusCode == 400 || httpResp.statusCode == 403 {
+                                self.geminiTestStatus = "Invalid API Key (HTTP \(httpResp.statusCode))"
+                            } else {
+                                self.geminiTestStatus = "Verification failed (HTTP \(httpResp.statusCode))"
+                            }
+                            self.isTestingGeminiKey = false
+                        }
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    self.geminiTestStatus = "Network error: \(error.localizedDescription)"
+                    self.isTestingGeminiKey = false
                 }
             }
         }
