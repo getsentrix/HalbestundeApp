@@ -32,23 +32,23 @@ public struct ScorePlayerView: View {
         NavigationStack {
             Group {
                 if viewModel.currentScore.measures.isEmpty {
-                VStack(spacing: 16) {
-                    Image(systemName: "play.circle")
-                        .font(.system(size: 52))
-                        .foregroundColor(.secondary.opacity(0.5))
-                    
-                    Text("No Score Loaded")
-                        .font(.title3.weight(.bold))
-                        .foregroundColor(.primary)
-                    
-                    Text("Scan sheet music or select a piece from your library to start playback.")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 36)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
+                    VStack(spacing: 16) {
+                        Image(systemName: "play.circle")
+                            .font(.system(size: 52))
+                            .foregroundColor(.secondary.opacity(0.5))
+                        
+                        Text("No Score Loaded")
+                            .font(.title3.weight(.bold))
+                            .foregroundColor(.primary)
+                        
+                        Text("Scan sheet music or select a piece from your library to start playback.")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 36)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
                 ScrollView {
                     VStack(spacing: 22) {
                     // 1. Cover / Score Preview Switcher

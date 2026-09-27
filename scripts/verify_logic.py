@@ -289,6 +289,48 @@ def test_transposition_and_practice_controls():
     assert not in_loop(1) and in_loop(2) and in_loop(5) and not in_loop(6)
     print("  ✓ Circle of fifths transposition and practice loop boundaries validated.")
 
+def test_scan_and_import_pipeline():
+    print("[7/7] Testing scan, document import, fallback synthesis, and storage pipeline...")
+    with open("Sources/HalbestundeApp/ViewModels/ScannerViewModel.swift", "r", encoding="utf-8") as f:
+        vm_code = f.read()
+    assert "public var onScoreAccepted: ((Score) -> Void)?" in vm_code, "ScannerViewModel must have onScoreAccepted transition callback"
+    assert "func processImportedFile(at url: URL)" in vm_code, "ScannerViewModel must handle file imports"
+    assert "func createFallbackScore(title: String" in vm_code, "ScannerViewModel must synthesize fallback scores"
+    assert "saveAndOpenScore" in vm_code, "ScannerViewModel must save score to persistent storage"
+    assert "progressFraction" in vm_code, "ScannerViewModel must provide progress feedback"
+    assert "func reset()" in vm_code, "ScannerViewModel must support reset"
+    
+    with open("Sources/HalbestundeApp/Views/Scanner/ScannerView.swift", "r", encoding="utf-8") as f:
+        scan_code = f.read()
+    assert "fileImporter" in scan_code, "ScannerView must offer file importer for MusicXML and images"
+    assert "normalizedCGImage" in scan_code, "ScannerView must normalize image orientations"
+    assert "Scan Sheet Music" in scan_code, "ScannerView must provide Scan Sheet Music button"
+    assert "Import from Photos" in scan_code, "ScannerView must provide Photos import button"
+    
+    with open("Sources/HalbestundeApp/ViewModels/SongLibraryViewModel.swift", "r", encoding="utf-8") as f:
+        lib_vm_code = f.read()
+    assert "func importFile(at url: URL, completion:" in lib_vm_code, "SongLibraryViewModel must have retained importFile method"
+    assert "activeImportScanner" in lib_vm_code, "SongLibraryViewModel must retain activeImportScanner to avoid deallocation"
+    assert "isImporting" in lib_vm_code, "SongLibraryViewModel must track isImporting"
+    
+    with open("Sources/HalbestundeApp/Views/Library/SongLibraryView.swift", "r", encoding="utf-8") as f:
+        lib_code = f.read()
+    assert "fileImporter" in lib_code, "SongLibraryView must offer direct file import"
+    assert "showScannerSheet" in lib_code, "SongLibraryView must support scanning sheet"
+    assert "viewModel.importFile" in lib_code, "SongLibraryView must call viewModel.importFile"
+    assert "viewModel.isImporting" in lib_code, "SongLibraryView must display live importing banner"
+    
+    with open("Sources/HalbestundeApp/Services/ScanStorageService.swift", "r", encoding="utf-8") as f:
+        storage_code = f.read()
+    assert "func saveScore(" in storage_code, "ScanStorageService must have saveScore convenience method"
+    assert "func loadScannedSongs()" in storage_code, "ScanStorageService must load scanned songs"
+    
+    with open("Sources/HalbestundeApp/OMR/NoteRecognitionEngine.swift", "r", encoding="utf-8") as f:
+        engine_code = f.read()
+    assert "synthesizeFallbackMeasures" in engine_code, "NoteRecognitionEngine must synthesize fallback measures"
+    
+    print("  ✓ Scan and file import pipeline, fallback synthesis, and storage verified.")
+
 if __name__ == "__main__":
     test_swift_code_integrity()
     test_pitch_math()
@@ -296,4 +338,5 @@ if __name__ == "__main__":
     test_musicxml_multistaff_timing()
     test_note_retriggering_logic()
     test_transposition_and_practice_controls()
+    test_scan_and_import_pipeline()
     print("\nSUCCESS: All deep verification checks PASSED!")

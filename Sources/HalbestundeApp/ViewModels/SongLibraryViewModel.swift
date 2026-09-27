@@ -18,6 +18,14 @@ public final class SongLibraryViewModel: ObservableObject {
     @Published public var showFavoritesOnly: Bool = false
     @Published public var showScannedOnly: Bool = false
     
+    // Live import state & progress feedback
+    @Published public var isImporting: Bool = false
+    @Published public var importStatus: String = ""
+    @Published public var importProgress: Double = 0.0
+    
+    // Retain active scanner during import to prevent ARC deallocation
+    private var activeImportScanner: ScannerViewModel?
+    
     public init(
         repertoireService: RepertoireService = .shared,
         storageService: ScanStorageService = .shared
@@ -45,6 +53,36 @@ public final class SongLibraryViewModel: ObservableObject {
             
             return matchesQuery && matchesDifficulty && matchesFavorites && matchesScanned
         }
+    }
+    
+    /// Imports a MusicXML, Image, or PDF file into the library, saves it, and invokes completion
+    public func importFile(at url: URL, completion: @escaping (Score) -> Void) {
+        isImporting = true
+        importProgress = 0.1
+        importStatus = "Reading \(url.lastPathComponent)..."
+        
+        let scanner = ScannerViewModel(storageService: storageService)
+        self.activeImportScanner = scanner // Retained!
+        
+        scanner.onScoreAccepted = { [weak self] score in
+            guard let self = self else { return }
+            self.loadLibrary()
+            self.importProgress = 1.0
+            self.importStatus = "Score ready!"
+            self.isImporting = false
+            self.activeImportScanner = nil
+            completion(score)
+        }
+        
+        // Mirror progress to view model
+        scanner.$progressFraction
+            .receive(on: DispatchQueue.main)
+            .assign(to: &$importProgress)
+        scanner.$statusMessage
+            .receive(on: DispatchQueue.main)
+            .assign(to: &$importStatus)
+            
+        scanner.processImportedFile(at: url)
     }
     
     public func toggleFavorite(for song: SongItem) {

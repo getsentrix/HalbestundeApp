@@ -159,4 +159,72 @@ final class MusicXMLParserTests: XCTestCase {
         XCTAssertEqual(reLHNotes?.count, 1)
         XCTAssertEqual(reLHNotes?.first?.startBeat, 0.0)
     }
+    
+    func testSynthesizeFallbackMeasures() {
+        let measures = NoteRecognitionEngine.synthesizeFallbackMeasures(title: "Fallback Piece")
+        XCTAssertEqual(measures.count, 4)
+        for measure in measures {
+            XCTAssertFalse(measure.rightHandNotes.isEmpty, "RH notes should not be empty")
+            XCTAssertFalse(measure.leftHandNotes.isEmpty, "LH notes should not be empty")
+            XCTAssertEqual(measure.durationBeats, 4.0)
+        }
+    }
+    
+    func testStorageServiceSaveAndLoadScore() {
+        let storage = ScanStorageService.shared
+        let testScore = Score(
+            title: "Storage Test Score",
+            composer: "Test Artist",
+            defaultBPM: 120.0,
+            measures: NoteRecognitionEngine.synthesizeFallbackMeasures(title: "Storage Test Score")
+        )
+        
+        let savedItem = storage.saveScore(testScore)
+        XCTAssertEqual(savedItem.title, "Storage Test Score")
+        XCTAssertTrue(savedItem.isScanned)
+        XCTAssertNotNil(savedItem.previewScore)
+        
+        let loaded = storage.loadScannedSongs()
+        XCTAssertTrue(loaded.contains(where: { $0.id == savedItem.id }))
+        
+        // Clean up
+        storage.deleteScannedSong(withId: savedItem.id)
+        let afterDelete = storage.loadScannedSongs()
+        XCTAssertFalse(afterDelete.contains(where: { $0.id == savedItem.id }))
+    }
+    
+    func testScannerViewModelFallback() {
+        let vm = ScannerViewModel()
+        let fallback = vm.createFallbackScore(title: "My Étude")
+        XCTAssertEqual(fallback.title, "My Étude")
+        XCTAssertEqual(fallback.measures.count, 4)
+        XCTAssertEqual(fallback.measures[0].rightHandNotes.count, 4)
+        XCTAssertEqual(fallback.measures[0].leftHandNotes.count, 4)
+        
+        let saved = vm.saveAndOpenScore(score: fallback)
+        XCTAssertNotNil(saved)
+        XCTAssertEqual(saved?.title, "My Étude")
+        
+        // Clean up
+        if let id = saved?.id {
+            ScanStorageService.shared.deleteScannedSong(withId: id)
+        }
+    }
+    
+    func testSongLibraryViewModelImportFile() {
+        let libVM = SongLibraryViewModel()
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("test_piece.musicxml")
+        try? sampleXML.write(to: tempURL, atomically: true, encoding: .utf8)
+        
+        let expectation = expectation(description: "Import file completes")
+        libVM.importFile(at: tempURL) { importedScore in
+            XCTAssertEqual(importedScore.title, "Test Piece")
+            XCTAssertEqual(importedScore.measures.count, 1)
+            XCTAssertFalse(libVM.allSongs.isEmpty)
+            expectation.fulfill()
+        }
+        
+        waitForExpectations(timeout: 2.0)
+        try? FileManager.default.removeItem(at: tempURL)
+    }
 }

@@ -7,11 +7,13 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
 
 public struct SongLibraryView: View {
     @StateObject var viewModel = SongLibraryViewModel()
     @State private var filterMode: Int = 0 // 0: All, 1: Scans, 2: Favorites
     @State private var showScannerSheet: Bool = false
+    @State private var showFileImporter: Bool = false
     var onSongSelected: (Score) -> Void
     
     public init(onSongSelected: @escaping (Score) -> Void) {
@@ -43,8 +45,28 @@ public struct SongLibraryView: View {
                     .listRowBackground(Color.clear)
                 }
                 
+                // Live File Importing Banner
+                if viewModel.isImporting {
+                    Section {
+                        VStack(spacing: 10) {
+                            ProgressView(value: max(0.05, viewModel.importProgress))
+                                .progressViewStyle(.linear)
+                                .tint(Color.accentColor)
+                            
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                    .scaleEffect(0.85)
+                                Text(viewModel.importStatus)
+                                    .font(.subheadline.weight(.medium))
+                                    .foregroundColor(.primary)
+                            }
+                        }
+                        .padding(.vertical, 8)
+                    }
+                }
+                
                 // Songs List Section
-                if displayedSongs.isEmpty {
+                if displayedSongs.isEmpty && !viewModel.isImporting {
                     Section {
                         VStack(spacing: 12) {
                             Image(systemName: "music.note.list")
@@ -55,18 +77,28 @@ public struct SongLibraryView: View {
                                 .font(.headline)
                                 .foregroundColor(.primary)
                             
-                            Text(viewModel.searchQuery.isEmpty ? "Scan sheet music to add it to your library." : "No results matching \"\(viewModel.searchQuery)\".")
+                            Text(viewModel.searchQuery.isEmpty ? "Scan sheet music or import a MusicXML file to add it to your library." : "No results matching \"\(viewModel.searchQuery)\".")
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
                                 .multilineTextAlignment(.center)
                             
-                            Button(action: {
-                                showScannerSheet = true
-                            }) {
-                                Label("Scan Sheet Music", systemImage: "doc.viewfinder")
-                                    .fontWeight(.semibold)
+                            VStack(spacing: 8) {
+                                Button(action: {
+                                    showScannerSheet = true
+                                }) {
+                                    Label("Scan Sheet Music", systemImage: "doc.viewfinder")
+                                        .fontWeight(.semibold)
+                                }
+                                .buttonStyle(.borderedProminent)
+                                
+                                Button(action: {
+                                    showFileImporter = true
+                                }) {
+                                    Label("Import MusicXML or Image", systemImage: "folder.badge.plus")
+                                        .fontWeight(.medium)
+                                }
+                                .buttonStyle(.bordered)
                             }
-                            .buttonStyle(.borderedProminent)
                             .padding(.top, 4)
                         }
                         .frame(maxWidth: .infinity)
@@ -115,11 +147,20 @@ public struct SongLibraryView: View {
             .navigationTitle("Library")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(action: {
-                        showScannerSheet = true
-                    }) {
-                        Label("Scan", systemImage: "doc.viewfinder")
-                            .font(.subheadline.weight(.semibold))
+                    HStack(spacing: 12) {
+                        Button(action: {
+                            showScannerSheet = true
+                        }) {
+                            Label("Scan", systemImage: "doc.viewfinder")
+                                .font(.subheadline.weight(.semibold))
+                        }
+                        
+                        Button(action: {
+                            showFileImporter = true
+                        }) {
+                            Label("Import", systemImage: "folder.badge.plus")
+                                .font(.subheadline.weight(.semibold))
+                        }
                     }
                 }
                 
@@ -133,7 +174,33 @@ public struct SongLibraryView: View {
                 ScannerView { scannedScore in
                     showScannerSheet = false
                     viewModel.loadLibrary()
-                    onSongSelected(scannedScore)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                        onSongSelected(scannedScore)
+                    }
+                }
+            }
+            .fileImporter(
+                isPresented: $showFileImporter,
+                allowedContentTypes: [
+                    .item,
+                    .content,
+                    .data,
+                    .image,
+                    .pdf,
+                    .xml,
+                    UTType(filenameExtension: "musicxml") ?? .data,
+                    UTType(filenameExtension: "mxl") ?? .data
+                ],
+                allowsMultipleSelection: false
+            ) { result in
+                switch result {
+                case .success(let urls):
+                    guard let url = urls.first else { return }
+                    viewModel.importFile(at: url) { newScore in
+                        onSongSelected(newScore)
+                    }
+                case .failure:
+                    break
                 }
             }
             .onAppear {

@@ -42,6 +42,26 @@ public final class ScanStorageService {
         persist(existing)
     }
     
+    @discardableResult
+    public func saveScore(_ score: Score, isScanned: Bool = true) -> SongItem {
+        let songItem = SongItem(
+            id: score.id,
+            title: score.title,
+            composer: score.composer,
+            difficulty: .intermediate,
+            isScanned: isScanned,
+            isFavorite: false,
+            dateAdded: Date(),
+            durationSeconds: score.durationSeconds(at: score.defaultBPM),
+            estimatedMeasureCount: score.measures.count,
+            keySignatureName: score.keySignature.name,
+            timeSignatureDisplay: score.timeSignature.displayString,
+            previewScore: score
+        )
+        saveScannedSong(songItem)
+        return songItem
+    }
+    
     public func loadScannedSongs() -> [SongItem] {
         guard let url = storageFileURL, fileManager.fileExists(atPath: url.path) else {
             return []
@@ -65,7 +85,11 @@ public final class ScanStorageService {
         guard let url = storageFileURL else { return }
         do {
             let data = try JSONEncoder().encode(songs)
-            try data.write(to: url, options: [.atomic, .completeFileProtection])
+            do {
+                try data.write(to: url, options: [.atomic, .completeFileProtection])
+            } catch {
+                try data.write(to: url, options: [.atomic])
+            }
         } catch {
             // Silently fail without exposing sensitive paths
         }

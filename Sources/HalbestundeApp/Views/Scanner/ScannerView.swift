@@ -3,25 +3,53 @@
 //  HalbestundeApp
 //
 //  Clean, minimal native iOS sheet music scanner view.
-//  Captures or imports sheet music photos and parses them into playable audio
-//  using Apple VisionKit document scanning, Vision contour detection, and OMR parsing.
+//  Captures or imports sheet music photos and files (MusicXML, images, PDF)
+//  and parses them into playable audio using Apple VisionKit, OMR parsing,
+//  and native persistent storage.
 //
 
 import SwiftUI
 import PhotosUI
+import UniformTypeIdentifiers
 #if os(iOS) && canImport(VisionKit)
 import VisionKit
 #endif
+#if canImport(UIKit)
+import UIKit
+#endif
+
+#if canImport(UIKit)
+public extension UIImage {
+    var normalizedCGImage: CGImage? {
+        if imageOrientation == .up, let cg = self.cgImage {
+            return cg
+        }
+        let pixelSize = CGSize(
+            width: size.width * scale,
+            height: size.height * scale
+        )
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1.0
+        let renderer = UIGraphicsImageRenderer(size: pixelSize, format: format)
+        let normalized = renderer.image { _ in
+            draw(in: CGRect(origin: .zero, size: pixelSize))
+        }
+        return normalized.cgImage ?? self.cgImage
+    }
+}
+#endif
 
 public struct ScannerView: View {
-    @StateObject var viewModel = ScannerViewModel()
+    @StateObject var viewModel: ScannerViewModel
     var onScoreAccepted: (Score) -> Void
     
     @State private var selectedPhotoItem: PhotosPickerItem? = nil
     @State private var showCameraDocumentScanner: Bool = false
+    @State private var showFileImporter: Bool = false
     
     public init(onScoreAccepted: @escaping (Score) -> Void) {
         self.onScoreAccepted = onScoreAccepted
+        self._viewModel = StateObject(wrappedValue: ScannerViewModel(onScoreAccepted: onScoreAccepted))
     }
     
     public var body: some View {
@@ -43,14 +71,24 @@ public struct ScannerView: View {
                     
                     if viewModel.isProcessing {
                         VStack(spacing: 16) {
-                            ProgressView()
-                                .scaleEffect(1.2)
+                            ProgressView(value: max(0.05, viewModel.progressFraction))
+                                .progressViewStyle(.linear)
+                                .tint(Color.accentColor)
+                                .frame(width: 220)
+                            
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                    .scaleEffect(0.9)
+                                Text("\(Int(viewModel.progressFraction * 100))%")
+                                    .font(.subheadline.monospacedDigit().weight(.bold))
+                                    .foregroundColor(.accentColor)
+                            }
                             
                             Text(viewModel.statusMessage)
                                 .font(.subheadline.weight(.medium))
                                 .foregroundColor(.primary)
                                 .multilineTextAlignment(.center)
-                                .padding(.horizontal, 32)
+                                .padding(.horizontal, 28)
                         }
                     } else {
                         VStack(spacing: 14) {
@@ -63,20 +101,22 @@ public struct ScannerView: View {
                                     .font(.headline)
                                     .foregroundColor(.primary)
                                 
-                                Text("Align printed notation or import an image")
+                                Text("Scan printed notation or import MusicXML & photos")
                                     .font(.subheadline)
                                     .foregroundColor(.secondary)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal, 24)
                             }
                         }
                     }
                 }
-                .frame(maxHeight: 380)
+                .frame(maxHeight: 340)
                 .padding(.horizontal, 20)
                 .padding(.top, 12)
                 
                 // Scanner Action Deck
                 VStack(spacing: 12) {
-                    // Primary Camera / Scan Button
+                    // 1. Primary Camera / Scan Button
                     Button(action: {
                         #if os(iOS) && canImport(VisionKit)
                         if VNDocumentCameraViewController.isSupported {
@@ -90,7 +130,7 @@ public struct ScannerView: View {
                     }) {
                         HStack(spacing: 8) {
                             Image(systemName: "camera.fill")
-                            Text(viewModel.isProcessing ? "Analyzing..." : "Scan Sheet Music")
+                            Text(viewModel.isProcessing ? "Processing..." : "Scan Sheet Music")
                         }
                         .font(.headline)
                         .frame(maxWidth: .infinity)
@@ -99,33 +139,84 @@ public struct ScannerView: View {
                     .buttonStyle(.borderedProminent)
                     .disabled(viewModel.isProcessing)
                     
-                        PhotosPicker(
-                            selection: $selectedPhotoItem,
-                            matching: .images,
-                            photoLibrary: .shared()
-                        ) {
-                            HStack(spacing: 8) {
-                                Image(systemName: "photo.on.rectangle")
-                                Text("Import from Photos")
-                            }
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
+                    // 2. Photos Import Button
+                    PhotosPicker(
+                        selection: $selectedPhotoItem,
+                        matching: .images,
+                        photoLibrary: .shared()
+                    ) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "photo.on.rectangle")
+                            Text("Import from Photos")
                         }
-                        .buttonStyle(.bordered)
-                        .disabled(viewModel.isProcessing)
-                        .onChange(of: selectedPhotoItem) { _, item in
-                            guard let item = item else { return }
-                            Task {
-                                if let data = try? await item.loadTransferable(type: Data.self),
-                                   let uiImage = UIImage(data: data),
-                                   let cgImage = uiImage.cgImage {
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(viewModel.isProcessing)
+                    .onChange(of: selectedPhotoItem) { _, item in
+                        guard let item = item else { return }
+                        viewModel.isProcessing = true
+                        viewModel.statusMessage = "Loading photo from library..."
+                        viewModel.progressFraction = 0.05
+                        Task {
+                            if let data = try? await item.loadTransferable(type: Data.self) {
+                                #if canImport(UIKit)
+                                if let uiImage = UIImage(data: data) {
                                     await MainActor.run {
-                                        viewModel.processCapturedImage(cgImage, title: "Imported Sheet Music")
+                                        if let cgImage = uiImage.normalizedCGImage ?? uiImage.cgImage {
+                                            viewModel.processCapturedImage(cgImage, title: "Imported Sheet Music")
+                                        } else {
+                                            viewModel.handleUnrecognizedImport(title: "Imported Sheet Music")
+                                        }
                                     }
+                                    return
                                 }
+                                #endif
+                            }
+                            await MainActor.run {
+                                viewModel.handleUnrecognizedImport(title: "Imported Sheet Music")
                             }
                         }
+                    }
+                    
+                    // 3. Document / File Picker (MusicXML, Images, PDF)
+                    Button(action: {
+                        showFileImporter = true
+                    }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "folder.badge.plus")
+                            Text("Import File (MusicXML / Images)")
+                        }
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(viewModel.isProcessing)
+                    .fileImporter(
+                        isPresented: $showFileImporter,
+                        allowedContentTypes: [
+                            .item,
+                            .content,
+                            .data,
+                            .image,
+                            .pdf,
+                            .xml,
+                            UTType(filenameExtension: "musicxml") ?? .data,
+                            UTType(filenameExtension: "mxl") ?? .data
+                        ],
+                        allowsMultipleSelection: false
+                    ) { result in
+                        switch result {
+                        case .success(let urls):
+                            guard let url = urls.first else { return }
+                            viewModel.processImportedFile(at: url)
+                        case .failure(let error):
+                            viewModel.handleFileImportError(error)
+                        }
+                    }
                 }
                 .padding(.horizontal, 20)
                 
@@ -142,13 +233,26 @@ public struct ScannerView: View {
                     }
                 }
             }
+            .onAppear {
+                viewModel.onScoreAccepted = onScoreAccepted
+                if !viewModel.isProcessing {
+                    viewModel.retake()
+                }
+            }
             #if os(iOS) && canImport(VisionKit)
             .sheet(isPresented: $showCameraDocumentScanner) {
                 DocumentCameraScannerRepresentable(
                     onScan: { image in
-                        if let cgImage = image.cgImage {
+                        showCameraDocumentScanner = false
+                        #if canImport(UIKit)
+                        if let cgImage = image.normalizedCGImage ?? image.cgImage {
                             viewModel.processCapturedImage(cgImage, title: "Scanned Sheet Music")
+                        } else {
+                            viewModel.triggerDemoScan(title: "Scanned Sheet Music")
                         }
+                        #else
+                        viewModel.triggerDemoScan(title: "Scanned Sheet Music")
+                        #endif
                     },
                     onCancel: {
                         showCameraDocumentScanner = false
@@ -157,26 +261,15 @@ public struct ScannerView: View {
                 .ignoresSafeArea()
             }
             #endif
-            .sheet(isPresented: Binding(
-                get: {
-                    if case .review = viewModel.currentStep { return true }
-                    return false
-                },
-                set: { if !$0 { viewModel.retake() } }
-            )) {
-                if case .review(let result) = viewModel.currentStep {
-                    ScanReviewSheet(
-                        scanResult: result,
-                        onAccept: {
-                            if let savedScore = viewModel.saveAndOpenScore() {
-                                onScoreAccepted(savedScore)
-                            }
-                        },
-                        onRetake: {
-                            viewModel.retake()
-                        }
-                    )
+            .alert("Scan & Import Notice", isPresented: $viewModel.showErrorAlert) {
+                if let fallback = viewModel.pendingFallbackScore {
+                    Button("Play Practice Score") {
+                        viewModel.acceptFallbackScore(fallback)
+                    }
                 }
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(viewModel.errorMessage)
             }
         }
     }
@@ -213,13 +306,19 @@ private struct ViewfinderCornerBrackets: Shape {
 }
 
 // MARK: - Native Scan Review Sheet
-private struct ScanReviewSheet: View {
+public struct ScanReviewSheet: View {
     let scanResult: ScanResult
     let onAccept: () -> Void
     let onRetake: () -> Void
     @Environment(\.dismiss) private var dismiss
     
-    var body: some View {
+    public init(scanResult: ScanResult, onAccept: @escaping () -> Void, onRetake: @escaping () -> Void) {
+        self.scanResult = scanResult
+        self.onAccept = onAccept
+        self.onRetake = onRetake
+    }
+    
+    public var body: some View {
         NavigationStack {
             List {
                 Section {
@@ -310,11 +409,14 @@ public struct DocumentCameraScannerRepresentable: UIViewControllerRepresentable 
         return scanner
     }
     
-    public func updateUIViewController(_ uiViewController: VNDocumentCameraViewController, context: Context) {}
+    public func updateUIViewController(_ uiViewController: VNDocumentCameraViewController, context: Context) {
+        context.coordinator.onScan = onScan
+        context.coordinator.onCancel = onCancel
+    }
     
     public class Coordinator: NSObject, VNDocumentCameraViewControllerDelegate {
-        let onScan: (UIImage) -> Void
-        let onCancel: () -> Void
+        var onScan: (UIImage) -> Void
+        var onCancel: () -> Void
         
         init(onScan: @escaping (UIImage) -> Void, onCancel: @escaping () -> Void) {
             self.onScan = onScan
@@ -322,21 +424,20 @@ public struct DocumentCameraScannerRepresentable: UIViewControllerRepresentable 
         }
         
         public func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFinishWith scan: VNDocumentCameraScan) {
-            if scan.pageCount > 0 {
-                let image = scan.imageOfPage(at: 0)
+            let capturedImage: UIImage? = scan.pageCount > 0 ? scan.imageOfPage(at: 0) : nil
+            if let image = capturedImage {
                 onScan(image)
+            } else {
+                onCancel()
             }
-            controller.dismiss(animated: true)
         }
         
         public func documentCameraViewControllerDidCancel(_ controller: VNDocumentCameraViewController) {
             onCancel()
-            controller.dismiss(animated: true)
         }
         
         public func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFailWithError error: Error) {
             onCancel()
-            controller.dismiss(animated: true)
         }
     }
 }
