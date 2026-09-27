@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "ios-developer": {
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "skillPath": "skills/ios-developer/SKILL.md",
+      "computedHash": "abdc566ed854fe276802e11d33a831cc2e22ae5571932a22d0ab937ab0da4e32"
+    }
+  }
+}

@@ -87,9 +87,15 @@ public final class NoteRecognitionEngine {
             }
         }
         
-        if measures.isEmpty {
-            measures = NoteRecognitionEngine.synthesizeFallbackMeasures(title: title)
-        }
+        // DIAGNOSTIC: Log recognition result before returning
+        #if DEBUG
+        print("[NoteRecognitionEngine] recognizeScore: detected \(measures.count) measures from \(systems.count) staff systems.")
+        #endif
+        
+        // NOTE: Do NOT synthesize fake fallback measures here.
+        // An empty score signals to the caller (MusicScannerService / ScannerViewModel)
+        // that recognition failed, so they can show a real error to the user.
+        // Silently playing fake music hides real OMR failures.
         
         return Score(
             title: title,
@@ -326,12 +332,14 @@ public final class NoteRecognitionEngine {
         let height = image.height
         let bottomLineY = lines[4]
         
+        // ROI: staff region + 2.5 staff spacings above and below for ledger lines
         let topBound = max(0, Int(lines[0] - spacing * 2.5))
         let bottomBound = min(height - 1, Int(lines[4] + spacing * 2.5))
+        // Trim 0.5 spacing from left/right to avoid clef and barline strokes
         let leftBound = max(0, Int(leftX + spacing * 0.5))
         let rightBound = min(width - 1, Int(rightX - spacing * 0.5))
         
-        guard rightBound > leftBound && bottomBound > topBound else { return [] }
+        guard rightBound > leftBound + 4 && bottomBound > topBound + 4 else { return [] }
         
         let roiWidth = rightBound - leftBound
         let roiHeight = bottomBound - topBound
@@ -350,11 +358,17 @@ public final class NoteRecognitionEngine {
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ) else { return [] }
         
+        // CoreGraphics Y-axis is bottom-up. To extract the ROI at (leftBound, topBound):
+        // We translate so that pixel (leftBound, topBound) in image maps to (0,0) in context.
+        // CoreGraphics bottom = image pixel row (height - 1), so:
+        //   contextY = 0 corresponds to imageY = height - 1 - (topBound + roiHeight - 1) = height - topBound - roiHeight
         context.draw(
             image,
-            in: CGRect(x: -leftBound, y: -(height - bottomBound), width: width, height: height)
+            in: CGRect(x: -leftBound, y: -(height - topBound - roiHeight), width: width, height: height)
         )
         
+        // Build column dark-pixel density profile
+        let lumThreshold: Float = 130.0
         var columnDensities = [Float](repeating: 0, count: roiWidth)
         for x in 0..<roiWidth {
             var darkCount: Float = 0
@@ -364,68 +378,121 @@ public final class NoteRecognitionEngine {
                 let g = Float(rawData[offset + 1])
                 let b = Float(rawData[offset + 2])
                 let lum = (0.299 * r) + (0.587 * g) + (0.114 * b)
-                if lum < 130.0 { darkCount += 1.0 }
+                if lum < lumThreshold { darkCount += 1.0 }
             }
             columnDensities[x] = darkCount
         }
         
-        let noteheadWidth = max(4.0, spacing * 1.1)
-        var noteEvents = [NoteEvent]()
-        var lastDetectedX: CGFloat = -100
+        // Background = median column density (staff lines add a constant baseline across all columns)
+        var sortedDensities = columnDensities
+        sortedDensities.sort()
+        let medianDensity = sortedDensities[sortedDensities.count / 2]
         
-        for x in stride(from: 2, to: roiWidth - 2, by: 2) {
+        // A notehead adds a compact dark blob above the baseline.
+        // Threshold: background + 30% of staff spacing.
+        let noteheadThreshold = medianDensity + Float(spacing) * 0.30
+        
+        // Minimum horizontal gap between distinct noteheads (≈ 1 notehead width)
+        let noteheadWidth = max(4.0, spacing * 1.0)
+        var noteEvents = [NoteEvent]()
+        
+        #if DEBUG
+        print("[NoteRecognitionEngine] detectNoteheadsInStaff(\(clef == .treble ? "treble" : "bass")): "
+              + "roiWidth=\(roiWidth), medianDensity=\(String(format: "%.1f", medianDensity)), "
+              + "noteheadThreshold=\(String(format: "%.1f", noteheadThreshold)), spacing=\(String(format: "%.1f", spacing))")
+        #endif
+        
+        var lastDetectedX: CGFloat = -noteheadWidth * 2
+        var x = 0
+        while x < roiWidth {
             let density = columnDensities[x]
-            if density > Float(spacing * 0.8) && (CGFloat(x) - lastDetectedX) > noteheadWidth {
-                var weightedY: Float = 0
-                var totalWeight: Float = 0
-                for scanX in max(0, x - 2)...min(roiWidth - 1, x + 2) {
-                    for y in 0..<roiHeight {
-                        let offset = (y * bytesPerRow) + (scanX * bytesPerPixel)
-                        let r = Float(rawData[offset])
-                        let g = Float(rawData[offset + 1])
-                        let b = Float(rawData[offset + 2])
-                        let lum = (0.299 * r) + (0.587 * g) + (0.114 * b)
-                        if lum < 130.0 {
-                            let weight = (130.0 - lum)
-                            weightedY += Float(y) * weight
-                            totalWeight += weight
-                        }
+            
+            guard density > noteheadThreshold else {
+                x += 1
+                continue
+            }
+            
+            // Grow cluster of high-density columns
+            var clusterEnd = x
+            while clusterEnd + 1 < roiWidth && columnDensities[clusterEnd + 1] > noteheadThreshold {
+                clusterEnd += 1
+            }
+            let clusterCenter = (x + clusterEnd) / 2
+            
+            // Enforce minimum gap between noteheads
+            if CGFloat(clusterCenter) - lastDetectedX < noteheadWidth {
+                x = clusterEnd + 1
+                continue
+            }
+            
+            // Compute weighted Y centroid within cluster ± 2px
+            let scanXLo = max(0, clusterCenter - 2)
+            let scanXHi = min(roiWidth - 1, clusterCenter + 2)
+            var weightedY: Float = 0
+            var totalWeight: Float = 0
+            for scanX in scanXLo...scanXHi {
+                for y in 0..<roiHeight {
+                    let offset = (y * bytesPerRow) + (scanX * bytesPerPixel)
+                    let r = Float(rawData[offset])
+                    let g = Float(rawData[offset + 1])
+                    let b = Float(rawData[offset + 2])
+                    let lum = (0.299 * r) + (0.587 * g) + (0.114 * b)
+                    if lum < lumThreshold {
+                        let weight = lumThreshold - lum
+                        weightedY += Float(y) * weight
+                        totalWeight += weight
                     }
                 }
-                
-                if totalWeight > 0 {
-                    let localCentroidY = CGFloat(weightedY / totalWeight)
-                    let globalCentroidY = CGFloat(topBound) + localCentroidY
-                    let globalCentroidX = CGFloat(leftBound + x)
-                    
-                    let staffPos = Double((bottomLineY - globalCentroidY) / spacing)
-                    let pitch = NoteRecognitionEngine.pitchForStaffPosition(position: staffPos, clef: clef)
-                    
-                    let xFraction = Double(CGFloat(x) / CGFloat(roiWidth))
-                    let beatOffset = round(xFraction * 4.0 * 2.0) / 2.0
-                    let startBeat = measureStartBeat + min(3.5, max(0.0, beatOffset))
-                    
-                    let noteBox = CGRect(
-                        x: globalCentroidX - spacing * 0.6,
-                        y: globalCentroidY - spacing * 0.5,
-                        width: spacing * 1.2,
-                        height: spacing
-                    )
-                    
-                    noteEvents.append(NoteEvent(
-                        pitch: pitch,
-                        startBeat: startBeat,
-                        durationBeats: 1.0,
-                        velocity: hand == .right ? 0.85 : 0.72,
-                        hand: hand,
-                        measureIndex: measureIndex,
-                        boundingBox: noteBox
-                    ))
-                    lastDetectedX = CGFloat(x)
-                }
             }
+            
+            if totalWeight > 0 {
+                let localCentroidY = CGFloat(weightedY / totalWeight)
+                // Convert local ROI Y back to global image Y
+                let globalCentroidY = CGFloat(topBound) + localCentroidY
+                let globalCentroidX = CGFloat(leftBound + clusterCenter)
+                
+                // Staff position: distance from bottom line in staff spacings
+                // lines[] is top-to-bottom in UIKit coordinates (y increases downward)
+                let staffPos = Double((bottomLineY - globalCentroidY) / spacing)
+                let pitch = NoteRecognitionEngine.pitchForStaffPosition(position: staffPos, clef: clef)
+                
+                // Map X position to beat within measure
+                let xFraction = Double(CGFloat(clusterCenter) / CGFloat(max(1, roiWidth)))
+                let beatOffset = round(xFraction * 4.0 * 2.0) / 2.0
+                let startBeat = measureStartBeat + min(3.5, max(0.0, beatOffset))
+                
+                let noteBox = CGRect(
+                    x: globalCentroidX - spacing * 0.6,
+                    y: globalCentroidY - spacing * 0.5,
+                    width: spacing * 1.2,
+                    height: spacing
+                )
+                
+                #if DEBUG
+                print("  Notehead at x=\(clusterCenter), y=\(String(format: "%.1f", globalCentroidY)), "
+                      + "staffPos=\(String(format: "%.2f", staffPos)) -> MIDI \(pitch.midiNumber)")
+                #endif
+                
+                noteEvents.append(NoteEvent(
+                    pitch: pitch,
+                    startBeat: startBeat,
+                    durationBeats: 1.0,
+                    velocity: hand == .right ? 0.85 : 0.72,
+                    hand: hand,
+                    measureIndex: measureIndex,
+                    boundingBox: noteBox
+                ))
+                lastDetectedX = CGFloat(clusterCenter)
+            }
+            
+            x = clusterEnd + 1
         }
+        
+        #if DEBUG
+        print("[NoteRecognitionEngine] \(clef == .treble ? "Treble" : "Bass") staff: \(noteEvents.count) noteheads detected.")
+        #endif
         
         return noteEvents
     }
 }
+

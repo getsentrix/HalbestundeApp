@@ -74,8 +74,8 @@ public final class MusicScannerService: ObservableObject {
                 
                 let response = try await sendToRemoteOMR(
                     data: imgData,
-                    mimeType: "image/jpeg",
-                    fileName: "sheet_music.jpg",
+                    mimeType: "image/png",
+                    fileName: "sheet_music.png",
                     scoreTitle: scoreTitle,
                     backendURLString: serverURL
                 )
@@ -119,6 +119,13 @@ public final class MusicScannerService: ObservableObject {
         await updateState(.detectingStaffSystems, progress: 0.45)
         let systems = await staffDetector.detectStaves(in: cgImage)
         
+        #if DEBUG
+        print("[MusicScannerService] Local OMR: detected \(systems.count) staff system(s).")
+        for (i, sys) in systems.enumerated() {
+            print("  System \(i): treble=\(sys.trebleStaffLines.count) lines, bass=\(sys.bassStaffLines.count) lines, barlines=\(sys.barlineXPositions.count), spacing=\(String(format: "%.1f", sys.staffLineSpacing))px")
+        }
+        #endif
+        
         await updateState(.recognizingNotesAndClefs, progress: 0.75)
         try? await Task.sleep(nanoseconds: 150_000_000)
         
@@ -130,13 +137,35 @@ public final class MusicScannerService: ObservableObject {
             composer: composer
         )
         
+        #if DEBUG
+        print("[MusicScannerService] Local OMR result: \(recognizedScore.measures.count) measures, \(recognizedScore.allNotes.count) notes.")
+        #endif
+        
+        // If recognition produced no notes, surface a real error instead of silently
+        // succeeding with an empty score (which would play nothing or fake fallback music).
+        if recognizedScore.measures.isEmpty || recognizedScore.allNotes.isEmpty {
+            let errorMsg = "On-device OMR could not detect any musical notation in this image. " +
+                           "Ensure the image shows clearly printed sheet music with visible staff lines. " +
+                           "For best results, use the remote OMR backend (Settings > OMR Backend)."
+            #if DEBUG
+            print("[MusicScannerService] Local OMR FAILED: no notes detected. Returning error.")
+            #endif
+            await updateState(.failed(errorMsg), progress: 0.0)
+            return .failure(NSError(
+                domain: "PianoGlassOMR",
+                code: 10,
+                userInfo: [NSLocalizedDescriptionKey: errorMsg]
+            ))
+        }
+        
         let duration = Date().timeIntervalSince(startTime)
+        let noteheadConf: Float = recognizedScore.allNotes.count > 10 ? 0.78 : 0.55
         let scanResult = ScanResult(
             recognizedScore: recognizedScore,
             confidence: ScanConfidenceScore(
-                staffDetectionConfidence: 0.96,
-                noteheadConfidence: 0.93,
-                rhythmConsistencyConfidence: 0.91
+                staffDetectionConfidence: systems.isEmpty ? 0.0 : 0.82,
+                noteheadConfidence: noteheadConf,
+                rhythmConsistencyConfidence: 0.70
             ),
             staffSystems: systems.map {
                 RecognizedStaffSystem(
@@ -155,6 +184,7 @@ public final class MusicScannerService: ObservableObject {
         await updateState(.completed(recognizedScore), progress: 1.0)
         return .success(scanResult)
     }
+
     
     /// Processes raw document data (PDF or image) by sending to the OMR backend.
     public func processDocumentData(
@@ -262,11 +292,18 @@ public final class MusicScannerService: ObservableObject {
     }
     
     private func cgImageToData(_ cgImage: CGImage) -> Data? {
+        // Use PNG (lossless) to preserve full pixel fidelity for OMR accuracy.
+        // JPEG compression at any quality level degrades fine-grained ink strokes
+        // (staff lines, noteheads, accidentals) causing false pitch detections.
         #if canImport(UIKit)
-        return UIImage(cgImage: cgImage).jpegData(compressionQuality: 0.85) ?? UIImage(cgImage: cgImage).pngData()
+        if let pngData = UIImage(cgImage: cgImage).pngData() {
+            return pngData
+        }
+        // PNG fallback: high-quality JPEG only if PNG fails (memory pressure)
+        return UIImage(cgImage: cgImage).jpegData(compressionQuality: 0.98)
         #elseif canImport(ImageIO) && canImport(UniformTypeIdentifiers)
         let mutableData = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(mutableData, UTType.jpeg.identifier as CFString, 1, nil) else {
+        guard let destination = CGImageDestinationCreateWithData(mutableData, UTType.png.identifier as CFString, 1, nil) else {
             return nil
         }
         CGImageDestinationAddImage(destination, cgImage, nil)
