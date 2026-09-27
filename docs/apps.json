@@ -10,14 +10,14 @@
       "name": "Halbestunde",
       "bundleIdentifier": "com.halbestunde.app",
       "developerName": "Dylan",
-      "version": "1.0.0",
-      "versionDate": "2026-09-27T04:00:00Z",
-      "versionDescription": "Release v1.0.0:\n• Sheet music scanner with camera capture and photo import\n• On-device acoustic grand piano audio engine\n• Minimal player with scrub bar, tempo slider, and looping\n• Score library with secure local storage",
-      "downloadURL": "https://github.com/getsentrix/HalbestundeApp/releases/download/v1.0.0/HalbestundeApp.ipa",
+      "version": "1.0.1",
+      "versionDate": "2026-09-27T04:50:28Z",
+      "versionDescription": "Release v1.0.1:\n\u2022 Sheet music scanner with camera capture and photo import\n\u2022 On-device acoustic grand piano audio engine\n\u2022 Minimal player with scrub bar, tempo slider, and looping\n\u2022 Score library with secure local storage",
+      "downloadURL": "https://github.com/getsentrix/HalbestundeApp/releases/download/v1.0.1/HalbestundeApp.ipa",
       "localizedDescription": "Halbestunde turns sheet music into playable audio with Apple Vision OMR and native audio playback in a distraction-free, minimal iOS interface.",
       "iconURL": "https://getsentrix.github.io/HalbestundeApp/assets/app-icon.png",
       "tintColor": "00E5FF",
-      "size": 715486,
+      "size": 715484,
       "minOSVersion": "17.0",
       "screenshots": [
         "https://getsentrix.github.io/HalbestundeApp/assets/screenshot-player.png",
@@ -33,10 +33,10 @@
   ],
   "news": [
     {
-      "title": "Halbestunde v1.0.0 Available",
-      "identifier": "halbestunde-v100-release",
+      "title": "Halbestunde v1.0.1 Available",
+      "identifier": "halbestunde-v101-release",
       "caption": "Scan sheet music with minimal native iOS UI",
-      "date": "2026-09-27T04:00:00Z",
+      "date": "2026-09-27T04:50:28Z",
       "tintColor": "00E5FF",
       "appID": "com.halbestunde.app",
       "notify": true
