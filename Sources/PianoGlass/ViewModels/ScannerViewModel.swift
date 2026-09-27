@@ -182,8 +182,9 @@ public final class ScannerViewModel: ObservableObject {
                 return
             } else {
                 isProcessing = false
-                currentStep = .idle
+                currentStep = .camera
                 errorMessage = "Unable to parse musical notation from \(url.lastPathComponent). Please ensure it is a valid MusicXML 3.0+ score."
+                showErrorAlert = true
                 return
             }
         }
@@ -197,8 +198,9 @@ public final class ScannerViewModel: ObservableObject {
                 processCapturedImage(cgImage, title: displayTitle)
             } else {
                 isProcessing = false
-                currentStep = .idle
+                currentStep = .camera
                 errorMessage = "Unable to process image data from \(url.lastPathComponent)."
+                showErrorAlert = true
             }
             return
         }
@@ -299,14 +301,16 @@ public final class ScannerViewModel: ObservableObject {
     
     public func handleUnrecognizedImport(title: String) {
         isProcessing = false
-        currentStep = .idle
+        currentStep = .camera
         errorMessage = "Recognition failed: Could not detect clean musical notation in '\(title)'. Please ensure the score is well-lit, laid flat, and not obstructed."
+        showErrorAlert = true
     }
     
     public func handleFileImportError(_ error: Error, fallbackTitle: String = "Imported Music") {
         isProcessing = false
-        currentStep = .idle
+        currentStep = .camera
         errorMessage = "Import failed: \(error.localizedDescription)"
+        showErrorAlert = true
     }
     
     public func acceptFallbackScore(_ score: Score) {
