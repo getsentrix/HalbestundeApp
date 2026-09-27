@@ -106,6 +106,9 @@ async def transcribe_sheet_music(
     # 2. Process all pages through OMR pipeline (single or multi-page concatenation)
     try:
         musicxml_str, engine_used = transcribe_document(images, title=resolved_title)
+    except ValueError as ve:
+        logger.warning(f"OMR unreadable scan: {ve}")
+        raise HTTPException(status_code=422, detail=str(ve))
     except Exception as e:
         logger.error(f"OMR transcription failed: {e}")
         raise HTTPException(status_code=500, detail=f"OMR processing failed: {str(e)}")

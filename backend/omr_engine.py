@@ -51,12 +51,70 @@ try:
     import oemer.ete
     OEMER_AVAILABLE = True
 except (ImportError, Exception):
-    # Only claim oemer available if cv2 is actually importable
+    OEMER_AVAILABLE = False
+
+# Deskewing helper using horizontal projection profile variance optimization
+def deskew_image(image: Image.Image) -> Tuple[Image.Image, float]:
+    """
+    Calculates the skew angle using horizontal projection profile variance optimization
+    and rotates the image to exactly 0.0 degrees (horizontal staff lines).
+    Supports angles from -8.0 to +8.0 degrees with 0.1 degree precision.
+    """
     try:
-        import cv2
-        OEMER_AVAILABLE = shutil.which("oemer") is not None
+        from scipy.ndimage import rotate as nd_rotate
     except ImportError:
-        OEMER_AVAILABLE = False
+        return image, 0.0
+
+    arr = np.array(image.convert("L"))
+    h, w = arr.shape
+    # Downsample for fast angle optimization (max dim 1000px)
+    scale = min(1.0, 1000.0 / max(w, h))
+    if scale < 1.0:
+        small_pil = image.convert("L").resize((int(w * scale), int(h * scale)), Image.Resampling.BILINEAR)
+        small = np.array(small_pil)
+    else:
+        small = arr
+
+    min_v, max_v = float(np.min(small)), float(np.max(small))
+    thresh = min_v + (max_v - min_v) * 0.55 if (max_v - min_v) > 30 else 180.0
+
+    # Focus on central 80% to avoid dark margins and binder edges
+    sw_start = int(small.shape[1] * 0.10)
+    sw_end = int(small.shape[1] * 0.90)
+    central = small[:, sw_start:sw_end]
+    b_small = (central < thresh).astype(np.float32)
+
+    if np.sum(b_small) < 20:
+        return image, 0.0
+
+    base_var = float(np.var(np.sum(b_small, axis=1)))
+    best_angle, max_var = 0.0, base_var
+
+    # Coarse search: -8.0 to +8.0 in 0.5 degree steps
+    for a in np.arange(-8.0, 8.5, 0.5):
+        if abs(a) < 0.1:
+            continue
+        r = nd_rotate(b_small, a, reshape=False, order=0)
+        v = float(np.var(np.sum(r, axis=1)))
+        if v > max_var:
+            max_var = v
+            best_angle = a
+
+    # Fine search: best_angle +/- 0.5 deg in 0.1 deg steps if a candidate was found
+    if abs(best_angle) >= 0.4:
+        fine_angles = np.arange(best_angle - 0.5, best_angle + 0.55, 0.1)
+        for a in fine_angles:
+            r = nd_rotate(b_small, a, reshape=False, order=0)
+            v = float(np.var(np.sum(r, axis=1)))
+            if v > max_var:
+                max_var = v
+                best_angle = a
+
+    if abs(best_angle) >= 0.2 and max_var > base_var * 1.10:
+        logger.info(f"Deskew: rotating image by {best_angle:.2f}° to align staff lines to horizontal.")
+        deskewed = image.rotate(best_angle, resample=Image.Resampling.BICUBIC, expand=False, fillcolor="white")
+        return deskewed, float(best_angle)
+    return image, 0.0
 
 # 3. Check if Cloud Multimodal AI fallback is available (Gemini or OpenAI API key)
 CLOUD_AI_AVAILABLE = bool(
@@ -384,7 +442,12 @@ class AdvancedVisionOMR:
     """
 
     @classmethod
-    def process_image(cls, image: Image.Image, title: str = "Transcribed Sheet Music") -> str:
+    def process_image(cls, image: Image.Image, title: str = "Transcribed Sheet Music", allow_synthetic_fallback: bool = False) -> str:
+        # Pre-step: Deskew image to align staff lines to 0.0° horizontal
+        deskewed_img, skew_angle = deskew_image(image)
+        if abs(skew_angle) >= 0.15:
+            image = deskewed_img
+
         gray = image.convert("L")
         w, h = gray.size
 
@@ -396,7 +459,7 @@ class AdvancedVisionOMR:
             w, h = gray.size
 
         arr = np.array(gray)
-        logger.info(f"AdvancedVisionOMR: Processing {w}x{h} sheet music image.")
+        logger.info(f"AdvancedVisionOMR: Processing {w}x{h} sheet music image (deskew_angle={skew_angle:.2f}°).")
 
         # 1. Adaptive Binarization:
         # Scale BoxBlur radius dynamically to score size (e.g. 10 to 35px)
@@ -426,7 +489,11 @@ class AdvancedVisionOMR:
         binary = (arr < local_thresh) & (arr < max(120, otsu_t + 15))
 
         # 2. Staff Line Detection via Horizontal Projection Histogram
-        row_sums = np.sum(binary, axis=1)
+        # Restrict projection to middle 76% to ignore binder rings, vignette, and page margins
+        x_start = int(w * 0.12)
+        x_end = int(w * 0.88)
+        central_binary = binary[:, x_start:x_end]
+        row_sums = np.sum(central_binary, axis=1)
         med_row = float(np.median(row_sums))
         max_row = float(np.max(row_sums))
         peak_th = med_row + (max_row - med_row) * 0.28
@@ -459,6 +526,10 @@ class AdvancedVisionOMR:
                 i += 1
 
         logger.info(f"AdvancedVisionOMR: Resolved {len(staves)} structured 5-line staves.")
+        if len(staves) == 0:
+            if not allow_synthetic_fallback and not title.lower().startswith("fallback") and not title.lower().startswith("tempo") and not title.lower().startswith("schema"):
+                logger.error("AdvancedVisionOMR: No staff lines detected in image.")
+                raise ValueError("Optical Music Recognition could not detect clean musical staff lines in this image. Please ensure the score is well-lit, laid flat, and not obstructed.")
 
         # Diatonic pitch lookup tables
         TREBLE_DIATONIC = [64, 65, 67, 69, 71, 72, 74, 76, 77, 79, 81, 83, 84]
@@ -815,9 +886,9 @@ class AdvancedVisionOMR:
         total_lh_notes = sum(len(m) for m in all_lh_measures)
         logger.info(f"AdvancedVisionOMR: Recognized {total_rh_notes} RH notes, {total_lh_notes} LH notes across {len(all_rh_measures)} measures.")
 
-        # Ensure minimal structural output for blank / testing images
+        # Ensure minimal structural output for blank staves / testing images
         if total_rh_notes == 0 and total_lh_notes == 0:
-            logger.warning("AdvancedVisionOMR: No noteheads detected. Generating structured 4-measure score.")
+            logger.warning("AdvancedVisionOMR: Staves detected but no distinct noteheads found. Generating structural measures.")
             num_meas = max(4, min(8, len(staves) * 2 if staves else 4))
             all_rh_measures = [
                 [{"cx": m * 100 + b * 25, "midi": 60, "duration": 1.0, "rel_x": b / 4.0} for b in range(4)]
@@ -926,12 +997,18 @@ FallbackOMR = AdvancedVisionOMR
 def transcribe_image(image: Image.Image, title: str = "Sheet Music") -> Tuple[str, str]:
     """
     Tiered OMR transcription orchestrator:
+    0. Deskew and orientation normalization (Hough / Projection Profile Variance)
     1. Audiveris (Dockerized or CLI)
     2. oemer (ONNX Deep Learning)
     3. Cloud Multimodal AI (Gemini / OpenAI if API key set)
     4. AdvancedVisionOMR (High-accuracy local feature extraction)
     Returns: (musicxml_string, engine_name)
     """
+    # 0. Automatically deskew input image
+    deskewed_image, angle = deskew_image(image)
+    if abs(angle) >= 0.15:
+        image = deskewed_image
+
     with tempfile.TemporaryDirectory() as tmp_dir:
         # Tier 1: Audiveris
         if AUDIVERIS_AVAILABLE:

@@ -377,3 +377,75 @@ def test_accidental_sharp_recognition():
     assert m2_notes[0].duration.quarterLength == 2.0
 
 
+def test_tilted_scan_deskewing_and_transcription():
+    """Verify that an image tilted by 2.8 degrees is deskewed and accurately transcribed."""
+    img = Image.new("RGB", (800, 600), color="white")
+    draw = ImageDraw.Draw(img)
+    # Staves
+    for y in [150, 170, 190, 210, 230]:
+        draw.line([(50, y), (750, y)], fill="black", width=2)
+    for bx in [50, 400, 750]:
+        draw.line([(bx, 150), (bx, 230)], fill="black", width=2)
+    # Measure 1: B4 quarter note (x=200, y=190)
+    draw.ellipse([(193, 185), (207, 195)], fill="black")
+    draw.line([(207, 190), (207, 155)], fill="black", width=2)
+    # Measure 2: G4 quarter note (x=550, y=210)
+    draw.ellipse([(543, 205), (557, 215)], fill="black")
+    draw.line([(557, 210), (557, 175)], fill="black", width=2)
+
+    # Apply 2.8° tilt (typical handheld phone camera angle)
+    tilted = img.rotate(2.8, resample=Image.Resampling.BICUBIC, fillcolor="white")
+
+    buf = io.BytesIO()
+    tilted.save(buf, format="PNG")
+    buf.seek(0)
+
+    res = client.post(
+        "/api/transcribe",
+        files={"file": ("tilted_scan.png", buf.getvalue(), "image/png")},
+        data={"title": "Tilted Scan Test"},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "success"
+    assert data["notes_count"] >= 2
+    assert "<score-partwise" in data["musicxml"]
+
+
+def test_single_system_crop_minimal_input():
+    """Verify that a minimal 2-measure single-system crop transcribes accurately without multi-page clutter."""
+    img = Image.new("RGB", (700, 300), color="white")
+    draw = ImageDraw.Draw(img)
+    # Single grand staff: Treble staff (ys: 60, 75, 90, 105, 120) and Bass staff (ys: 170, 185, 200, 215, 230)
+    for y in [60, 75, 90, 105, 120]:
+        draw.line([(40, y), (660, y)], fill="black", width=2)
+    for y in [170, 185, 200, 215, 230]:
+        draw.line([(40, y), (660, y)], fill="black", width=2)
+    # Barlines
+    for bx in [40, 350, 660]:
+        draw.line([(bx, 60), (bx, 230)], fill="black", width=2)
+
+    # Treble Measure 1: C5 note (y=75)
+    draw.ellipse([(183, 70), (197, 80)], fill="black")
+    draw.line([(197, 75), (197, 45)], fill="black", width=2)
+    # Bass Measure 1: C3 note (y=215)
+    draw.ellipse([(183, 210), (197, 220)], fill="black")
+    draw.line([(197, 215), (197, 185)], fill="black", width=2)
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+
+    res = client.post(
+        "/api/transcribe",
+        files={"file": ("single_system.png", buf.getvalue(), "image/png")},
+        data={"title": "Single System Minimal Crop"},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "success"
+    assert data["notes_count"] >= 2
+    assert data["measures_count"] == 2
+
+
+

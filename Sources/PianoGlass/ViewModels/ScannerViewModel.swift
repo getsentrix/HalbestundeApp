@@ -181,9 +181,9 @@ public final class ScannerViewModel: ObservableObject {
                 finishSuccessfulImport(finalScore)
                 return
             } else {
-                // If MusicXML parsing had missing parts or unsupported tags, synthesize playable fallback
-                let fallback = createFallbackScore(title: displayTitle)
-                finishSuccessfulImport(fallback, notice: "MusicXML parsed with standard harmonic arrangement.")
+                isProcessing = false
+                currentStep = .idle
+                errorMessage = "Unable to parse musical notation from \(url.lastPathComponent). Please ensure it is a valid MusicXML 3.0+ score."
                 return
             }
         }
@@ -196,8 +196,9 @@ public final class ScannerViewModel: ObservableObject {
             if let cgImage = uiImage.normalizedCGImage {
                 processCapturedImage(cgImage, title: displayTitle)
             } else {
-                let fallback = createFallbackScore(title: displayTitle)
-                finishSuccessfulImport(fallback, notice: "Image format loaded with playable arrangement.")
+                isProcessing = false
+                currentStep = .idle
+                errorMessage = "Unable to process image data from \(url.lastPathComponent)."
             }
             return
         }
@@ -297,24 +298,15 @@ public final class ScannerViewModel: ObservableObject {
     }
     
     public func handleUnrecognizedImport(title: String) {
-        let fallback = createFallbackScore(title: title)
-        finishSuccessfulImport(fallback, notice: "Image loaded with playable arrangement.")
+        isProcessing = false
+        currentStep = .idle
+        errorMessage = "Recognition failed: Could not detect clean musical notation in '\(title)'. Please ensure the score is well-lit, laid flat, and not obstructed."
     }
     
     public func handleFileImportError(_ error: Error, fallbackTitle: String = "Imported Music") {
-        let fallback = createFallbackScore(title: fallbackTitle)
-        capturedScore = fallback
-        let saved = saveAndOpenScore(score: fallback) ?? fallback
-        progressFraction = 1.0
-        statusMessage = "Loaded playable practice piece"
-        errorMessage = "File notice: \(error.localizedDescription). Loaded a playable practice piece."
-        pendingFallbackScore = saved
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            guard let self = self else { return }
-            self.isProcessing = false
-            self.onScoreAccepted?(saved)
-        }
+        isProcessing = false
+        currentStep = .idle
+        errorMessage = "Import failed: \(error.localizedDescription)"
     }
     
     public func acceptFallbackScore(_ score: Score) {

@@ -27,14 +27,146 @@ public struct DetectedStaffSystem {
 public final class VisionStaffDetector {
     public init() {}
     
-    /// Analyzes an input image to locate musical staves and measure boundaries
-    public func detectStaves(in cgImage: CGImage) async -> [DetectedStaffSystem] {
+    /// Automatically measures staff line tilt between -6.0° and +6.0° and rotates the CGImage to 0.0°
+    public static func deskewCGImage(_ cgImage: CGImage) -> (deskewed: CGImage, angle: CGFloat) {
         let width = cgImage.width
         let height = cgImage.height
+        guard width > 100 && height > 100 else { return (cgImage, 0.0) }
+        
+        let thumbScale = min(1.0, 400.0 / CGFloat(max(width, height)))
+        let tw = max(50, Int(CGFloat(width) * thumbScale))
+        let th = max(50, Int(CGFloat(height) * thumbScale))
+        
+        var rawThumb = [UInt8](repeating: 255, count: tw * th)
+        guard let thumbCtx = CGContext(
+            data: &rawThumb,
+            width: tw,
+            height: th,
+            bitsPerComponent: 8,
+            bytesPerRow: tw,
+            space: CGColorSpaceCreateDeviceGray(),
+            bitmapInfo: CGImageAlphaInfo.none.rawValue
+        ) else { return (cgImage, 0.0) }
+        
+        thumbCtx.draw(cgImage, in: CGRect(x: 0, y: 0, width: tw, height: th))
+        guard let thumbCG = thumbCtx.makeImage() else { return (cgImage, 0.0) }
+        
+        func varianceAtAngle(_ deg: CGFloat) -> CGFloat {
+            var rotData = [UInt8](repeating: 255, count: tw * th)
+            guard let rotCtx = CGContext(
+                data: &rotData,
+                width: tw,
+                height: th,
+                bitsPerComponent: 8,
+                bytesPerRow: tw,
+                space: CGColorSpaceCreateDeviceGray(),
+                bitmapInfo: CGImageAlphaInfo.none.rawValue
+            ) else { return 0.0 }
+            
+            rotCtx.setFillColor(gray: 1.0, alpha: 1.0)
+            rotCtx.fill(CGRect(x: 0, y: 0, width: tw, height: th))
+            
+            let rad = deg * .pi / 180.0
+            rotCtx.translateBy(x: CGFloat(tw) / 2.0, y: CGFloat(th) / 2.0)
+            rotCtx.rotate(by: rad)
+            rotCtx.translateBy(x: -CGFloat(tw) / 2.0, y: -CGFloat(th) / 2.0)
+            rotCtx.draw(thumbCG, in: CGRect(x: 0, y: 0, width: tw, height: th))
+            
+            let xStart = tw * 15 / 100
+            let xEnd = tw * 85 / 100
+            var rowSums = [CGFloat](repeating: 0.0, count: th)
+            var totalSum: CGFloat = 0.0
+            
+            for y in 0..<th {
+                var rowDark: CGFloat = 0.0
+                let rowOffset = y * tw
+                for x in xStart..<xEnd {
+                    if rotData[rowOffset + x] < 160 {
+                        rowDark += 1.0
+                    }
+                }
+                rowSums[y] = rowDark
+                totalSum += rowDark
+            }
+            
+            let mean = totalSum / CGFloat(th)
+            var varSum: CGFloat = 0.0
+            for r in rowSums {
+                let diff = r - mean
+                varSum += diff * diff
+            }
+            return varSum / CGFloat(th)
+        }
+        
+        let baseVar = varianceAtAngle(0.0)
+        var bestAngle: CGFloat = 0.0
+        var maxVar = baseVar
+        
+        var testAngle: CGFloat = -6.0
+        while testAngle <= 6.05 {
+            if abs(testAngle) > 0.1 {
+                let v = varianceAtAngle(testAngle)
+                if v > maxVar {
+                    maxVar = v
+                    bestAngle = testAngle
+                }
+            }
+            testAngle += 0.5
+        }
+        
+        if abs(bestAngle) >= 0.4 {
+            var fineAngle = bestAngle - 0.4
+            while fineAngle <= bestAngle + 0.45 {
+                let v = varianceAtAngle(fineAngle)
+                if v > maxVar {
+                    maxVar = v
+                    bestAngle = fineAngle
+                }
+                fineAngle += 0.1
+            }
+        }
+        
+        guard abs(bestAngle) >= 0.2 && maxVar > baseVar * 1.10 else {
+            return (cgImage, 0.0)
+        }
+        
+        guard let fullCtx = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return (cgImage, 0.0) }
+        
+        fullCtx.setFillColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0)
+        fullCtx.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        
+        let rad = bestAngle * .pi / 180.0
+        fullCtx.translateBy(x: CGFloat(width) / 2.0, y: CGFloat(height) / 2.0)
+        fullCtx.rotate(by: rad)
+        fullCtx.translateBy(x: -CGFloat(width) / 2.0, y: -CGFloat(height) / 2.0)
+        fullCtx.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        
+        if let rotated = fullCtx.makeImage() {
+            #if DEBUG
+            print("[VisionStaffDetector] Deskewed CGImage by \(String(format: "%.2f", bestAngle))°")
+            #endif
+            return (rotated, bestAngle)
+        }
+        return (cgImage, 0.0)
+    }
+    
+    /// Analyzes an input image to locate musical staves and measure boundaries
+    public func detectStaves(in cgImage: CGImage) async -> [DetectedStaffSystem] {
+        let (alignedImage, _) = VisionStaffDetector.deskewCGImage(cgImage)
+        let width = alignedImage.width
+        let height = alignedImage.height
         guard width > 50 && height > 50 else { return [] }
         
         // 1. Calculate horizontal row pixel intensity profile to find staff line peaks
-        let horizontalProfile = calculateHorizontalProfile(for: cgImage)
+        let horizontalProfile = calculateHorizontalProfile(for: alignedImage)
         let staffPeakIndices = findStaffPeaks(in: horizontalProfile, height: height)
         
         // 2. Group peaks into individual 5-line staves with consistent spacing
