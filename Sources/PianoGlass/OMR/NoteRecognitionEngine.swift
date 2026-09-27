@@ -482,8 +482,9 @@ public final class NoteRecognitionEngine {
             
             // Allow polyphonic chords with stacked notes at same X, avoiding only exact duplicate detections
             let isDuplicate = noteEvents.contains { existing in
-                let dx = abs(globalX - existing.boundingBox.midX)
-                let dy = abs(globalY - existing.boundingBox.midY)
+                guard let box = existing.boundingBox else { return false }
+                let dx = abs(globalX - box.midX)
+                let dy = abs(globalY - box.midY)
                 return dx < minNoteGap && dy < sp * 0.4
             }
             if isDuplicate {
