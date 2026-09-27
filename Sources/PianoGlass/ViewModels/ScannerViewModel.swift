@@ -207,33 +207,27 @@ public final class ScannerViewModel: ObservableObject {
         
         // 3. PDF import
         if fileExtension == "pdf" {
-            let useRemote = UserDefaults.standard.object(forKey: "useRemoteOMR") as? Bool ?? true
-            if useRemote {
-                statusMessage = "Transcribing PDF score with neural OMR..."
-                progressFraction = 0.25
-                Task { [weak self] in
-                    guard let self = self else { return }
-                    let res = await self.scannerService.processDocumentData(
-                        data,
-                        mimeType: "application/pdf",
-                        fileName: url.lastPathComponent,
-                        scoreTitle: displayTitle
-                    )
-                    await MainActor.run {
-                        switch res {
-                        case .success(let scanResult):
-                            self.finishSuccessfulImport(scanResult.recognizedScore)
-                        case .failure:
-                            // Fallback to local rendering
-                            self.processLocalPDF(data: data, title: displayTitle)
-                        }
+            statusMessage = "Transcribing PDF score..."
+            progressFraction = 0.25
+            Task { [weak self] in
+                guard let self = self else { return }
+                let res = await self.scannerService.processDocumentData(
+                    data,
+                    mimeType: "application/pdf",
+                    fileName: url.lastPathComponent,
+                    scoreTitle: displayTitle
+                )
+                await MainActor.run {
+                    switch res {
+                    case .success(let scanResult):
+                        self.finishSuccessfulImport(scanResult.recognizedScore)
+                    case .failure:
+                        // Fallback to local rendering
+                        self.processLocalPDF(data: data, title: displayTitle)
                     }
                 }
-                return
-            } else {
-                processLocalPDF(data: data, title: displayTitle)
-                return
             }
+            return
         }
         #endif
         

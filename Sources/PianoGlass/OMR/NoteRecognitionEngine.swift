@@ -375,9 +375,15 @@ public final class NoteRecognitionEngine {
         }
         
         // Staff line inpainting: remove isolated horizontal staff line pixels via
-        // vertical run-length filtering. Preserves notehead bodies on staff lines!
+        // vertical run-length AND horizontal run-length filtering.
+        // A pixel is removed only if:
+        //   1. It is dark (binary)
+        //   2. The pixel lineThick rows above AND below are both light (not on a notehead)
+        //   3. It is part of a long horizontal dark run (>= staffLineMinRun pixels wide)
+        //      Staff lines are continuous horizontal stripes; noteheads are compact ovals.
         var noteheadMask = binary
         let lineThick = max(2, Int(round(sp * 0.18)))
+        let staffLineMinRun = max(5, Int(sp * 1.5))  // minimum horizontal pixels to be a staff line
         if roiHeight > lineThick * 2 {
             for y in lineThick..<(roiHeight - lineThick) {
                 let rowOff = y * roiWidth
@@ -385,7 +391,23 @@ public final class NoteRecognitionEngine {
                 let belowOff = (y + lineThick) * roiWidth
                 for x in 0..<roiWidth {
                     if binary[rowOff + x] && !binary[aboveOff + x] && !binary[belowOff + x] {
-                        noteheadMask[rowOff + x] = false
+                        // Check horizontal run length at this y: count consecutive qualifying pixels
+                        // Scan left/right from x to measure the horizontal dark run
+                        var runLen = 0
+                        var lx = x
+                        while lx >= 0 && lx > x - staffLineMinRun - 2 && binary[rowOff + lx] && !binary[aboveOff + lx] && !binary[belowOff + lx] {
+                            runLen += 1
+                            lx -= 1
+                        }
+                        var rx = x + 1
+                        while rx < roiWidth && rx < x + staffLineMinRun + 2 && binary[rowOff + rx] && !binary[aboveOff + rx] && !binary[belowOff + rx] {
+                            runLen += 1
+                            rx += 1
+                        }
+                        // Only remove if it's part of a long continuous horizontal run (staff line)
+                        if runLen >= staffLineMinRun {
+                            noteheadMask[rowOff + x] = false
+                        }
                     }
                 }
             }
@@ -458,17 +480,18 @@ public final class NoteRecognitionEngine {
         }
         
         // Filter blobs by notehead geometric properties (both solid and hollow noteheads)
-        let minW = sp * 0.45
-        let maxW = sp * 2.4
-        let minH = sp * 0.40
-        let maxH = sp * 2.2
-        let minArea = Int(round(sp * sp * 0.14))
+        // Wider tolerances handle varying image resolutions, phone camera distances, and print sizes
+        let minW = sp * 0.35
+        let maxW = sp * 3.0
+        let minH = sp * 0.28
+        let maxH = sp * 2.8
+        let minArea = Int(round(sp * sp * 0.08))
         
         var noteheads = candidateBlobs.filter { b in
             let bw = CGFloat(b.maxX - b.minX + 1)
             let bh = CGFloat(b.maxY - b.minY + 1)
             let aspect = bw / max(1.0, bh)
-            return bw >= minW && bw <= maxW && bh >= minH && bh <= maxH && b.pixelCount >= minArea && aspect >= 0.45 && aspect <= 2.4
+            return bw >= minW && bw <= maxW && bh >= minH && bh <= maxH && b.pixelCount >= minArea && aspect >= 0.35 && aspect <= 2.8
         }
         
         noteheads.sort { $0.centroidX < $1.centroidX }
@@ -480,12 +503,14 @@ public final class NoteRecognitionEngine {
             let globalX = CGFloat(leftBound) + CGFloat(nh.centroidX)
             let globalY = CGFloat(topBound) + CGFloat(nh.centroidY)
             
-            // Allow polyphonic chords with stacked notes at same X, avoiding only exact duplicate detections
+            // Allow polyphonic chords: notes at same X but different Y (different pitch).
+            // A duplicate is only if both X and Y are very close (same notehead detected twice).
+            // dy threshold of sp*0.5 allows chords where notes are ≥0.5 staff spaces apart.
             let isDuplicate = noteEvents.contains { existing in
                 guard let box = existing.boundingBox else { return false }
                 let dx = abs(globalX - box.midX)
                 let dy = abs(globalY - box.midY)
-                return dx < minNoteGap && dy < sp * 0.4
+                return dx < minNoteGap && dy < sp * 0.5
             }
             if isDuplicate {
                 continue
@@ -543,14 +568,17 @@ public final class NoteRecognitionEngine {
             
             let centerIdx = Int(nh.centroidY) * roiWidth + Int(nh.centroidX)
             let centerEmpty = (centerIdx >= 0 && centerIdx < noteheadMask.count) ? (!noteheadMask[centerIdx]) : false
-            let isHollow = (fillRatio < 0.45 && bw >= sp * 0.60 && centerEmpty)
+            // Simplified hollow detection: if center is empty (hole) and blob is wide enough, it's hollow
+            // fillRatio threshold raised to 0.55 to handle partially-inked hollow noteheads
+            let isHollow = (fillRatio < 0.55 && bw >= sp * 0.5 && centerEmpty)
             let noteDuration: Double = isHollow ? (hasStem ? 2.0 : 4.0) : 1.0
             
             // Accidental analysis in noteheadMask (staff lines inpainted/filtered out!)
-            let accLeft = max(0, Int(nh.centroidX - sp * 1.8))
-            let accRight = max(0, Int(nh.centroidX - sp * 0.45))
-            let accTop = max(0, Int(nh.centroidY - sp * 0.7))
-            let accBottom = min(roiHeight - 1, Int(nh.centroidY + sp * 0.7))
+            // Widened left bound from sp*1.8 to sp*2.2 to catch accidentals further left of notehead
+            let accLeft = max(0, Int(nh.centroidX - sp * 2.2))
+            let accRight = max(0, Int(nh.centroidX - sp * 0.4))
+            let accTop = max(0, Int(nh.centroidY - sp * 0.75))
+            let accBottom = min(roiHeight - 1, Int(nh.centroidY + sp * 0.75))
             
             if accRight > accLeft + 2 && accBottom > accTop + 2 {
                 var accDarkCount = 0
@@ -576,10 +604,16 @@ public final class NoteRecognitionEngine {
                 }
             }
             
-            // Map X position to beat within measure
-            let xFrac = Double(CGFloat(nh.centroidX) / CGFloat(max(1, roiWidth)))
-            let beatOffset = round(xFrac * 4.0 * 2.0) / 2.0
-            let startBeat = measureStartBeat + min(3.5, max(0.0, beatOffset))
+            // Map X position to beat within measure using global coordinates.
+            // nh.centroidX is in ROI space (origin = leftBound in image coords).
+            // We must convert to image space first, then compute fraction within the measure (leftX..rightX).
+            let centroidGlobalX = CGFloat(leftBound) + CGFloat(nh.centroidX)
+            let measureWidth = max(1.0, rightX - leftX)
+            let xFrac = Double((centroidGlobalX - leftX) / measureWidth)
+            // Clamp to [0..1] and snap to nearest 8th-note grid (0.5 beat steps)
+            let rawBeatOffset = max(0.0, min(1.0, xFrac)) * 4.0
+            let beatOffset = round(rawBeatOffset * 8.0) / 8.0   // 8th-note precision
+            let startBeat = measureStartBeat + min(3.875, max(0.0, beatOffset))
             
             let noteBox = CGRect(
                 x: globalX - sp * 0.6,

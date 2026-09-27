@@ -33,7 +33,7 @@ public final class VisionStaffDetector {
         let height = cgImage.height
         guard width > 100 && height > 100 else { return (cgImage, 0.0) }
         
-        let thumbScale = min(1.0, 400.0 / CGFloat(max(width, height)))
+        let thumbScale = min(1.0, 600.0 / CGFloat(max(width, height)))
         let tw = max(50, Int(CGFloat(width) * thumbScale))
         let th = max(50, Int(CGFloat(height) * thumbScale))
         
@@ -179,7 +179,7 @@ public final class VisionStaffDetector {
             var consistent = true
             for j in 0..<4 {
                 let gap = abs(candidateLines[j + 1] - candidateLines[j])
-                if abs(gap - spacing) > spacing * 0.35 || gap < 4.0 || gap > CGFloat(height) / 8.0 {
+                if abs(gap - spacing) > spacing * 0.40 || gap < 4.0 || gap > CGFloat(height) / 8.0 {
                     consistent = false
                     break
                 }
@@ -214,8 +214,8 @@ public final class VisionStaffDetector {
                 let nextSpacing = averageSpacing(nextLines)
                 let interStaffGap = nextLines[0] - trebleLines[4]
                 
-                // Typical grand staff gap is between 1.0x and 7.0x staff spacing
-                if interStaffGap >= trebleSpacing * 1.0 && interStaffGap <= trebleSpacing * 7.0 {
+                // Typical grand staff gap is between 1.0x and 9.0x staff spacing
+                if interStaffGap >= trebleSpacing * 1.0 && interStaffGap <= trebleSpacing * 9.0 {
                     let avgSpacing = (trebleSpacing + nextSpacing) / 2.0
                     let topY = trebleLines[0]
                     let bottomY = nextLines[4]
@@ -365,8 +365,8 @@ public final class VisionStaffDetector {
         let medianVal = sorted[sorted.count / 2]
         let maxVal = sorted.last ?? 1.0
         
-        // Threshold: must rise above median background by at least 25% of peak prominence
-        let threshold = medianVal + max(1.0, (maxVal - medianVal) * 0.25)
+        // Threshold: must rise above median background by at least 18% of peak prominence
+        let threshold = medianVal + max(0.5, (maxVal - medianVal) * 0.18)
         
         // First pass: collect all local maxima above threshold
         var rawPeaks = [CGFloat]()
@@ -449,9 +449,9 @@ public final class VisionStaffDetector {
         
         // Adaptive ink threshold
         let darkThreshold: Float = 145.0
-        // A barline must be dark in at least 38% of the full grand staff height,
-        // or 55% of single staff height
-        let barlineMinFraction: Float = (staffHeight > 100.0) ? 0.36 : 0.52
+        // A barline must be dark in at least 30% of the full grand staff height,
+        // or 44% of single staff height
+        let barlineMinFraction: Float = (staffHeight > 100.0) ? 0.30 : 0.44
         
         var columnDarkFraction = [Float](repeating: 0, count: width)
         for x in 0..<width {
@@ -469,7 +469,7 @@ public final class VisionStaffDetector {
         
         // Find columns that qualify as barline candidates
         var candidates = [CGFloat]()
-        let minBarlineGap = CGFloat(width) * 0.04  // At least 4% of width between barlines
+        let minBarlineGap = CGFloat(width) * 0.025  // At least 2.5% of width between barlines
         
         var x = 0
         while x < width {

@@ -42,11 +42,15 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
     private var currentStep: String = "C"
     private var currentOctave: Int = 4
     private var currentAlter: Int = 0
+    private var currentAlterDouble: Double = 0.0  // Raw float alter from MusicXML
     private var currentDurationTicks: Int = 4
     private var currentStaffNumber: Int = 1
     private var currentVoice: Int = 1
     private var lastNoteStartTicks: Int = 0
     private var lastStaffNoteStartTicks: [Int: Int] = [:]
+    
+    // Key: "Step-Staff" e.g. "F#-1" to properly track accidentals per staff
+    private var measureAccidentalsByStaff: [String: Int] = [:]
     
     public override init() {
         super.init()
@@ -62,8 +66,17 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
         parser.shouldReportNamespacePrefixes = false
         
         measures.removeAll()
+        measureAccidentals.removeAll()
+        measureAccidentalsByStaff.removeAll()
         currentMeasureIndex = 0
         currentMeasureBeatStart = 0.0
+        globalMeasureTicks = 0
+        staffTickCursors = [:]
+        scoreTitle = "Untitled Score"
+        composer = "Unknown Composer"
+        divisions = 4
+        timeSignature = TimeSignature(numerator: 4, denominator: 4)
+        keySignature = KeySignature(fifths: 0, mode: "major")
         
         let success = parser.parse()
         guard success else {
@@ -100,6 +113,7 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
         if elementName == "measure" {
             currentMeasureNotes = []
             measureAccidentals.removeAll()
+            measureAccidentalsByStaff.removeAll()
             globalMeasureTicks = 0
             staffTickCursors = [1: 0, 2: 0]
             lastStaffNoteStartTicks = [1: 0, 2: 0]
@@ -118,6 +132,7 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
             currentStep = "C"
             currentOctave = 4
             currentAlter = 0
+            currentAlterDouble = 0.0
             currentDurationTicks = max(1, divisions)
             currentStaffNumber = 1
             currentVoice = 1
@@ -179,8 +194,11 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
         case "octave":
             if let oct = Int(currentText) { currentOctave = oct }
         case "alter":
-            if let alt = Int(currentText) {
-                currentAlter = alt
+            // MusicXML alter can be float (e.g. 0.5 for quarter-tones) or int (-1, 0, 1, 2)
+            // We round to nearest semitone for playback
+            if let altDouble = Double(currentText) {
+                currentAlterDouble = altDouble
+                currentAlter = Int(altDouble.rounded())
                 hasExplicitAlter = true
             }
         case "accidental":
@@ -247,14 +265,21 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
                 effectiveTicks = max(1, divisions)
             }
             
-            // Resolve chromatic alteration: explicit accidental vs key signature
+            // Resolve chromatic alteration: explicit accidental vs per-staff measure memory vs key signature
+            // Key includes both step and staff number to avoid cross-staff contamination (e.g. treble F# vs bass F)
+            let accidentalKey = "\(currentStep)-\(currentStaffNumber)"
             if !hasExplicitAlter {
-                if let remembered = measureAccidentals[currentStep] {
+                if let remembered = measureAccidentalsByStaff[accidentalKey] {
                     currentAlter = remembered
+                } else if let legacyRemembered = measureAccidentals[currentStep] {
+                    // Fall back to old per-step memory for backwards compatibility
+                    currentAlter = legacyRemembered
                 } else {
                     currentAlter = keySignatureAlter(step: currentStep, fifths: keySignature.fifths)
                 }
             } else {
+                // Natural sign explicitly cancels key signature accidentals within this measure
+                measureAccidentalsByStaff[accidentalKey] = currentAlter
                 measureAccidentals[currentStep] = currentAlter
             }
             
