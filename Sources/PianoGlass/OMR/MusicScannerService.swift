@@ -254,6 +254,18 @@ public final class MusicScannerService: ObservableObject {
     
     // MARK: - Networking
     
+    private func normalizeBackendURL(_ input: String) -> URL? {
+        var raw = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return nil }
+        if !raw.lowercased().hasPrefix("http://") && !raw.lowercased().hasPrefix("https://") {
+            raw = "http://" + raw
+        }
+        while raw.hasSuffix("/") {
+            raw.removeLast()
+        }
+        return URL(string: raw)
+    }
+    
     private func sendToRemoteOMR(
         data: Data,
         mimeType: String,
@@ -261,10 +273,10 @@ public final class MusicScannerService: ObservableObject {
         scoreTitle: String,
         backendURLString: String
     ) async throws -> RemoteTranscribeResponse {
-        guard let baseURL = URL(string: backendURLString) else {
+        guard let baseURL = normalizeBackendURL(backendURLString),
+              let endpoint = URL(string: "\(baseURL.absoluteString)/api/transcribe") else {
             throw URLError(.badURL)
         }
-        let endpoint = baseURL.appendingPathComponent("api/transcribe")
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.timeoutInterval = 45.0

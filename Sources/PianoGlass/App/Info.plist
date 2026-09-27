@@ -17,9 +17,9 @@
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.8</string>
+	<string>1.0.9</string>
 	<key>CFBundleVersion</key>
-	<string>10008</string>
+	<string>10009</string>
 	<key>CFBundleIcons</key>
 	<dict>
 		<key>CFBundlePrimaryIcon</key>
@@ -50,6 +50,15 @@
 	<string>PianoGlass requires camera access to scan piano sheet music and recognize musical notation.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>PianoGlass requires photo library access to import sheet music images and PDFs for recognition.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>PianoGlass connects to your local computer to process sheet music with the OMR backend server.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>

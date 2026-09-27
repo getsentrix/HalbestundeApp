@@ -173,16 +173,51 @@ public final class VisionStaffDetector {
         
         context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
         
+        // Scan central 70% of columns to avoid margins, table background, and shadows
+        let startX = max(0, width * 15 / 100)
+        let endX = min(width, width * 85 / 100)
+        let colStep = max(2, width / 400)
+        
+        // Step 1: Sample luminance to determine adaptive ink-vs-paper threshold
+        var minLum: Float = 255.0
+        var maxLum: Float = 0.0
+        var sampledLums = [Float]()
+        
+        for y in stride(from: height / 6, to: height * 5 / 6, by: max(4, height / 80)) {
+            for x in stride(from: startX, to: endX, by: colStep * 4) {
+                let offset = (y * bytesPerRow) + (x * bytesPerPixel)
+                let r = Float(rawData[offset])
+                let g = Float(rawData[offset + 1])
+                let b = Float(rawData[offset + 2])
+                let lum = (0.299 * r) + (0.587 * g) + (0.114 * b)
+                sampledLums.append(lum)
+                if lum < minLum { minLum = lum }
+                if lum > maxLum { maxLum = lum }
+            }
+        }
+        
+        // Adaptive threshold: robust to dim/warm lighting, shadows, and contrast variations
+        let contrast = maxLum - minLum
+        let inkThreshold: Float
+        if contrast > 30.0 && !sampledLums.isEmpty {
+            sampledLums.sort()
+            let p15 = sampledLums[sampledLums.count * 15 / 100]
+            let p85 = sampledLums[sampledLums.count * 85 / 100]
+            inkThreshold = p15 + (p85 - p15) * 0.45
+        } else {
+            inkThreshold = 140.0
+        }
+        
+        // Step 2: Build horizontal ink density profile
         for y in 0..<height {
             var darkPixelCount: Float = 0
-            for x in stride(from: 0, to: width, by: 4) {
+            for x in stride(from: startX, to: endX, by: colStep) {
                 let offset = (y * bytesPerRow) + (x * bytesPerPixel)
                 let r = Float(rawData[offset])
                 let g = Float(rawData[offset + 1])
                 let b = Float(rawData[offset + 2])
                 let luminance = (0.299 * r) + (0.587 * g) + (0.114 * b)
-                // Inverted: dark lines produce high values
-                if luminance < 140.0 {
+                if luminance < inkThreshold {
                     darkPixelCount += 1.0
                 }
             }
@@ -193,8 +228,13 @@ public final class VisionStaffDetector {
     
     private func findStaffPeaks(in profile: [Float], height: Int) -> [CGFloat] {
         guard !profile.isEmpty else { return [] }
-        let maxVal = profile.max() ?? 1.0
-        let threshold = maxVal * 0.45
+        var sorted = profile
+        sorted.sort()
+        let medianVal = sorted[sorted.count / 2]
+        let maxVal = sorted.last ?? 1.0
+        
+        // Threshold: must rise above median background by at least 25% of peak prominence
+        let threshold = medianVal + max(1.0, (maxVal - medianVal) * 0.25)
         
         // First pass: collect all local maxima above threshold
         var rawPeaks = [CGFloat]()
@@ -205,8 +245,7 @@ public final class VisionStaffDetector {
             }
         }
         
-        // Second pass: cluster adjacent peaks (caused by thick staff lines) into single peaks.
-        // Use an adaptive gap: peaks closer than 4px are the same thick staff line stroke.
+        // Second pass: cluster adjacent peaks (caused by thick staff lines) into single peaks
         var peaks = [CGFloat]()
         var i = 0
         while i < rawPeaks.count {
@@ -215,14 +254,9 @@ public final class VisionStaffDetector {
                 i += 1
                 cluster.append(rawPeaks[i])
             }
-            // Use the peak with the highest profile value as cluster representative
             let best = cluster.max(by: { profile[Int($0)] < profile[Int($1)] }) ?? cluster[0]
             
-            // Enforce minimum separation between distinct staff lines.
-            // For high-DPI (300 DPI), staff lines are typically 20-40px apart.
-            // Use 8px as a safe minimum that avoids false peaks while allowing 6px spacing.
-            if let lastPeak = peaks.last, (best - lastPeak) < 8.0 {
-                // Keep whichever has the higher value
+            if let lastPeak = peaks.last, (best - lastPeak) < 6.0 {
                 if profile[Int(best)] > profile[Int(peaks.last!)] {
                     peaks[peaks.count - 1] = best
                 }

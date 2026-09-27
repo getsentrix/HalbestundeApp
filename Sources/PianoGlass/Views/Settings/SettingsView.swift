@@ -167,8 +167,21 @@ public struct SettingsView: View {
         }
     }
     
+    private func normalizeURL(_ input: String) -> URL? {
+        var raw = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return nil }
+        if !raw.lowercased().hasPrefix("http://") && !raw.lowercased().hasPrefix("https://") {
+            raw = "http://" + raw
+        }
+        while raw.hasSuffix("/") {
+            raw.removeLast()
+        }
+        return URL(string: raw)
+    }
+    
     private func testBackendConnection() {
-        guard let url = URL(string: omrBackendURL)?.appendingPathComponent("api/health") else {
+        guard let baseURL = normalizeURL(omrBackendURL),
+              let healthURL = URL(string: "\(baseURL.absoluteString)/api/health") else {
             testStatus = "Invalid server URL"
             return
         }
@@ -177,8 +190,8 @@ public struct SettingsView: View {
         
         Task {
             do {
-                var request = URLRequest(url: url)
-                request.timeoutInterval = 4.0
+                var request = URLRequest(url: healthURL)
+                request.timeoutInterval = 5.0
                 let (_, response) = try await URLSession.shared.data(for: request)
                 if let httpResp = response as? HTTPURLResponse, httpResp.statusCode == 200 {
                     await MainActor.run {
@@ -186,14 +199,15 @@ public struct SettingsView: View {
                         self.isTestingConnection = false
                     }
                 } else {
+                    let code = (response as? HTTPURLResponse)?.statusCode ?? 0
                     await MainActor.run {
-                        self.testStatus = "Server returned error"
+                        self.testStatus = "Server error (HTTP \(code))"
                         self.isTestingConnection = false
                     }
                 }
             } catch {
                 await MainActor.run {
-                    self.testStatus = "Unreachable. Use PC local IP (e.g. 192.168.x.x:8000)"
+                    self.testStatus = "Unreachable. Ensure server is running on PC."
                     self.isTestingConnection = false
                 }
             }
