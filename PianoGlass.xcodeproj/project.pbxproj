@@ -21,6 +21,7 @@
 		AA10000C2C00000100000001 /* VisionStaffDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB10000C2C00000100000001 /* VisionStaffDetector.swift */; };
 		AA10000D2C00000100000001 /* NoteRecognitionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB10000D2C00000100000001 /* NoteRecognitionEngine.swift */; };
 		AA10000E2C00000100000001 /* MusicXMLParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB10000E2C00000100000001 /* MusicXMLParser.swift */; };
+		AA1000EE2C00000100000099 /* MusicXMLRepairEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1000EE2C00000100000099 /* MusicXMLRepairEngine.swift */; };
 		AA10000F2C00000100000001 /* MusicXMLExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB10000F2C00000100000001 /* MusicXMLExporter.swift */; };
 		AA1000102C00000100000001 /* MusicScannerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1000102C00000100000001 /* MusicScannerService.swift */; };
 		AA1000112C00000100000001 /* RepertoireService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1000112C00000100000001 /* RepertoireService.swift */; };
@@ -56,6 +57,7 @@
 		BB10000C2C00000100000001 /* VisionStaffDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionStaffDetector.swift; sourceTree = "<group>"; };
 		BB10000D2C00000100000001 /* NoteRecognitionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteRecognitionEngine.swift; sourceTree = "<group>"; };
 		BB10000E2C00000100000001 /* MusicXMLParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicXMLParser.swift; sourceTree = "<group>"; };
+		BB1000EE2C00000100000099 /* MusicXMLRepairEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicXMLRepairEngine.swift; sourceTree = "<group>"; };
 		BB10000F2C00000100000001 /* MusicXMLExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicXMLExporter.swift; sourceTree = "<group>"; };
 		BB1000102C00000100000001 /* MusicScannerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicScannerService.swift; sourceTree = "<group>"; };
 		BB1000112C00000100000001 /* RepertoireService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepertoireService.swift; sourceTree = "<group>"; };
@@ -166,6 +168,7 @@
 				BB10000C2C00000100000001 /* VisionStaffDetector.swift */,
 				BB10000D2C00000100000001 /* NoteRecognitionEngine.swift */,
 				BB10000E2C00000100000001 /* MusicXMLParser.swift */,
+				BB1000EE2C00000100000099 /* MusicXMLRepairEngine.swift */,
 				BB10000F2C00000100000001 /* MusicXMLExporter.swift */,
 				BB1000102C00000100000001 /* MusicScannerService.swift */,
 			);
@@ -305,6 +308,7 @@
 				AA10000C2C00000100000001 /* VisionStaffDetector.swift in Sources */,
 				AA10000D2C00000100000001 /* NoteRecognitionEngine.swift in Sources */,
 				AA10000E2C00000100000001 /* MusicXMLParser.swift in Sources */,
+				AA1000EE2C00000100000099 /* MusicXMLRepairEngine.swift in Sources */,
 				AA10000F2C00000100000001 /* MusicXMLExporter.swift in Sources */,
 				AA1000102C00000100000001 /* MusicScannerService.swift in Sources */,
 				AA1000112C00000100000001 /* RepertoireService.swift in Sources */,

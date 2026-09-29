@@ -17,10 +17,21 @@ import UIKit
 import PDFKit
 #endif
 
-public enum ScannerStep: Equatable {
+public enum ScannerStep {
     case camera
     case processing
     case review(ScanResult)
+}
+
+extension ScannerStep: Equatable {
+    public static func == (lhs: ScannerStep, rhs: ScannerStep) -> Bool {
+        switch (lhs, rhs) {
+        case (.camera, .camera): return true
+        case (.processing, .processing): return true
+        case (.review, .review): return true
+        default: return false
+        }
+    }
 }
 
 // MARK: - F11: Viewfinder Guidance State
