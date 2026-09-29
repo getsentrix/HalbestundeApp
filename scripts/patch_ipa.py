@@ -26,8 +26,8 @@ def patch_archive(ipa_path: str):
         pl["CFBundleDisplayName"] = "PianoGlass"
         pl["CFBundleName"] = "PianoGlass"
         pl["CFBundleIdentifier"] = "com.pianoglass.app"
-        pl["CFBundleShortVersionString"] = "1.0.26"
-        pl["CFBundleVersion"] = "10026"
+        pl["CFBundleShortVersionString"] = "1.0.27"
+        pl["CFBundleVersion"] = "10027"
         pl["NSCameraUsageDescription"] = "PianoGlass requires camera access to scan piano sheet music and recognize musical notation."
         pl["NSPhotoLibraryUsageDescription"] = "PianoGlass requires photo library access to import sheet music images and PDFs for recognition."
         items[plist_key] = plistlib.dumps(pl)
