@@ -120,13 +120,113 @@ def update_html(html_path: str, old_version: str, new_version: str):
         f.write(content)
 
 
+def update_settings_view(settings_path: str, new_version: str):
+    if not os.path.exists(settings_path):
+        return
+    with open(settings_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    content = re.sub(
+        r'(Bundle\.main\.infoDictionary\?\["CFBundleShortVersionString"\] as\? String \?\?\s*")[^"]+(")',
+        rf'\g<1>{new_version}\2',
+        content,
+    )
+
+    with open(settings_path, "w", encoding="utf-8") as f:
+        f.write(content)
+
+
+def update_patch_ipa(patch_ipa_path: str, new_version: str, build_num: int):
+    if not os.path.exists(patch_ipa_path):
+        return
+    with open(patch_ipa_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    # Update CFBundleShortVersionString
+    content = re.sub(
+        r'(pl\["CFBundleShortVersionString"\]\s*=\s*")[^"]+(")',
+        rf'\g<1>{new_version}\2',
+        content,
+    )
+    # Update CFBundleVersion
+    content = re.sub(
+        r'(pl\["CFBundleVersion"\]\s*=\s*")[^"]+(")',
+        rf'\g<1>{build_num}\2',
+        content,
+    )
+
+    with open(patch_ipa_path, "w", encoding="utf-8") as f:
+        f.write(content)
+
+
+def check_versions(expected_version: str = None) -> bool:
+    apps_json_path = os.path.join(REPO_ROOT, "apps.json")
+    docs_apps_json_path = os.path.join(REPO_ROOT, "docs", "apps.json")
+    altstore_json_path = os.path.join(REPO_ROOT, "altstore.json")
+    docs_altstore_json_path = os.path.join(REPO_ROOT, "docs", "altstore.json")
+    plist_path = os.path.join(REPO_ROOT, "Sources", "PianoGlass", "App", "Info.plist")
+    pbxproj_path = os.path.join(REPO_ROOT, "PianoGlass.xcodeproj", "project.pbxproj")
+    settings_path = os.path.join(REPO_ROOT, "Sources", "PianoGlass", "Views", "Settings", "SettingsView.swift")
+    patch_ipa_path = os.path.join(REPO_ROOT, "scripts", "patch_ipa.py")
+
+    manifests = {}
+    if os.path.exists(apps_json_path):
+        manifests["apps.json"] = load_json(apps_json_path)["apps"][0]["version"]
+    if os.path.exists(docs_apps_json_path):
+        manifests["docs/apps.json"] = load_json(docs_apps_json_path)["apps"][0]["version"]
+    if os.path.exists(altstore_json_path):
+        manifests["altstore.json"] = load_json(altstore_json_path)["apps"][0]["version"]
+    if os.path.exists(docs_altstore_json_path):
+        manifests["docs/altstore.json"] = load_json(docs_altstore_json_path)["apps"][0]["version"]
+    if os.path.exists(plist_path):
+        with open(plist_path, "r", encoding="utf-8") as f:
+            m = re.search(r"<key>CFBundleShortVersionString</key>\s*<string>([^<]+)</string>", f.read())
+            if m:
+                manifests["Info.plist"] = m.group(1).strip()
+    if os.path.exists(pbxproj_path):
+        with open(pbxproj_path, "r", encoding="utf-8") as f:
+            m = re.search(r"MARKETING_VERSION\s*=\s*([^;]+);", f.read())
+            if m:
+                manifests["project.pbxproj"] = m.group(1).strip()
+    if os.path.exists(settings_path):
+        with open(settings_path, "r", encoding="utf-8") as f:
+            m = re.search(r'Bundle\.main\.infoDictionary\?\["CFBundleShortVersionString"\] as\? String \?\?\s*"([^"]+)"', f.read())
+            if m:
+                manifests["SettingsView.swift"] = m.group(1).strip()
+    if os.path.exists(patch_ipa_path):
+        with open(patch_ipa_path, "r", encoding="utf-8") as f:
+            m = re.search(r'pl\["CFBundleShortVersionString"\]\s*=\s*"([^"]+)"', f.read())
+            if m:
+                manifests["patch_ipa.py"] = m.group(1).strip()
+
+    print("Checking manifest versions across project:")
+    target_version = expected_version or manifests.get("apps.json")
+    all_ok = True
+    for file, ver in manifests.items():
+        status = "[OK]" if ver == target_version else "[MISMATCH]"
+        if ver != target_version:
+            all_ok = False
+        print(f"  {status} {file}: {ver}")
+
+    if all_ok:
+        print(f"\nAll manifest versions are synchronized to {target_version}.")
+    else:
+        print(f"\nERROR: Manifest version mismatch detected (expected {target_version})!")
+    return all_ok
+
+
 def main():
     parser = argparse.ArgumentParser(description="PianoGlass Version & AltStore Updater")
     parser.add_argument("--bump", choices=["patch", "minor", "major"], default=None, help="Semver bump type")
     parser.add_argument("--set-version", default=None, help="Set exact version")
     parser.add_argument("--set-size", type=int, default=None, help="Update IPA size in bytes")
+    parser.add_argument("--check", action="store_true", help="Check that all manifests have matching versions")
     parser.add_argument("--dry-run", action="store_true", help="Print changes without modifying files")
     args = parser.parse_args()
+
+    if args.check:
+        success = check_versions(args.set_version)
+        sys.exit(0 if success else 1)
 
     apps_json_path = os.path.join(REPO_ROOT, "apps.json")
     docs_apps_json_path = os.path.join(REPO_ROOT, "docs", "apps.json")
@@ -134,6 +234,8 @@ def main():
     docs_altstore_json_path = os.path.join(REPO_ROOT, "docs", "altstore.json")
     plist_path = os.path.join(REPO_ROOT, "Sources", "PianoGlass", "App", "Info.plist")
     pbxproj_path = os.path.join(REPO_ROOT, "PianoGlass.xcodeproj", "project.pbxproj")
+    settings_path = os.path.join(REPO_ROOT, "Sources", "PianoGlass", "Views", "Settings", "SettingsView.swift")
+    patch_ipa_path = os.path.join(REPO_ROOT, "scripts", "patch_ipa.py")
     docs_index_path = os.path.join(REPO_ROOT, "docs", "index.html")
     root_index_path = os.path.join(REPO_ROOT, "index.html")
 
@@ -207,6 +309,12 @@ def main():
     # 4. Update index.html files
     update_html(docs_index_path, current_version, new_version)
     update_html(root_index_path, current_version, new_version)
+
+    # 5. Update SettingsView.swift fallback version
+    update_settings_view(settings_path, new_version)
+
+    # 6. Update scripts/patch_ipa.py
+    update_patch_ipa(patch_ipa_path, new_version, build_num)
 
     print(f"SUCCESS: Successfully bumped version to v{new_version}")
 

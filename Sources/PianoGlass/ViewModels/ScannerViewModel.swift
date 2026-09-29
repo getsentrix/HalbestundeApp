@@ -17,10 +17,108 @@ import UIKit
 import PDFKit
 #endif
 
-public enum ScannerStep {
+public enum ScannerStep: Equatable {
     case camera
     case processing
     case review(ScanResult)
+}
+
+// MARK: - F11: Viewfinder Guidance State
+public enum ViewfinderGuidanceState: String, CaseIterable, Equatable {
+    case readyToCapture = "readyToCapture"
+    case tooDark = "tooDark"
+    case glareWarning = "glareWarning"
+    case tiltWarning = "tiltWarning"
+    case tooFar = "tooFar"
+    case tooClose = "tooClose"
+    
+    public var message: String {
+        switch self {
+        case .readyToCapture:
+            return "Ready to scan • Alignment optimal"
+        case .tooDark:
+            return "Too dark — increase lighting or turn on flash"
+        case .glareWarning:
+            return "High glare detected — angle camera away from reflection"
+        case .tiltWarning:
+            return "Tilt exceeds 12° — hold phone parallel to page"
+        case .tooFar:
+            return "Move closer — score should fill 70%+ of frame"
+        case .tooClose:
+            return "Move back — keep entire score within frame"
+        }
+    }
+    
+    public var systemIcon: String {
+        switch self {
+        case .readyToCapture: return "checkmark.circle.fill"
+        case .tooDark: return "moon.fill"
+        case .glareWarning: return "sun.max.trianglebadge.exclamationmark.fill"
+        case .tiltWarning: return "gyroscope"
+        case .tooFar: return "arrow.up.left.and.arrow.down.right"
+        case .tooClose: return "arrow.down.right.and.arrow.up.left"
+        }
+    }
+}
+
+// MARK: - F12: Multi-Stage Progress Stepper
+public enum ProgressStage: Int, CaseIterable, Identifiable, Equatable {
+    case preprocessing = 1
+    case recognition = 2
+    case assembly = 3
+    case audioReady = 4
+    
+    public var id: Int { rawValue }
+    
+    public var title: String {
+        switch self {
+        case .preprocessing: return "Preprocessing & Deskew"
+        case .recognition: return "AI & Vision Recognition"
+        case .assembly: return "Score Assembly & Validation"
+        case .audioReady: return "Audio Engine Synthesis"
+        }
+    }
+    
+    public var description: String {
+        switch self {
+        case .preprocessing: return "Enhancing sheet image"
+        case .recognition: return "Transcribing notation"
+        case .assembly: return "Synthesizing MusicXML"
+        case .audioReady: return "Preparing playback"
+        }
+    }
+}
+
+// MARK: - F13: Scan Diagnostic Payload
+public struct ScanDiagnostic: Identifiable, Equatable {
+    public let id: UUID
+    public let failureReason: String
+    public let staffCount: Int
+    public let lightingQuality: String
+    public let apiStatus: String
+    public let suggestedAction: String
+    public let fallbackScore: Score?
+    public let errorCategory: String
+    
+    public init(
+        id: UUID = UUID(),
+        failureReason: String,
+        staffCount: Int = 0,
+        lightingQuality: String = "adequate",
+        apiStatus: String = "Unknown",
+        suggestedAction: String = "Ensure sheet music is flat, well-lit, and fills the viewfinder.",
+        fallbackScore: Score? = nil,
+        errorCategory: String = "unknown"
+    ) {
+        self.id = id
+        self.failureReason = failureReason
+        self.staffCount = staffCount
+        self.lightingQuality = lightingQuality
+        self.apiStatus = apiStatus
+        self.suggestedAction = suggestedAction
+        self.fallbackScore = fallbackScore
+        self.errorCategory = errorCategory
+    }
 }
 
 public final class ScannerViewModel: ObservableObject {
@@ -36,10 +134,26 @@ public final class ScannerViewModel: ObservableObject {
     @Published public var showPhotoPicker: Bool = false
     @Published public var capturedScore: Score?
     
-    // User alerts & recovery
+    // F11: Real-Time Viewfinder Guidance
+    @Published public var currentGuidanceState: ViewfinderGuidanceState = .readyToCapture
+    @Published public var currentLuminance: Float = 0.75
+    @Published public var currentFillRatio: Float = 0.85
+    @Published public var currentTiltDegrees: Float = 2.0
+    
+    // F12: Multi-Stage Progress Stepper
+    @Published public var currentStage: ProgressStage = .preprocessing
+    private var progressNudgeTimer: Timer?
+    
+    // F13: User alerts & recovery
     @Published public var showErrorAlert: Bool = false
     @Published public var errorMessage: String = ""
     @Published public var pendingFallbackScore: Score? = nil
+    @Published public var lastDiagnostic: ScanDiagnostic? = nil
+    @Published public var showDetailedDiagnostics: Bool = false
+    
+    // F14: Scan Review & Confirmation Sheet
+    @Published public var showReviewSheet: Bool = false
+    @Published public var activeScanResult: ScanResult? = nil
     
     // Direct transition callback to player
     public var onScoreAccepted: ((Score) -> Void)?
@@ -55,16 +169,16 @@ public final class ScannerViewModel: ObservableObject {
         self.storageService = storageService
         self.onScoreAccepted = onScoreAccepted
         
-        // Bind to OMR progress fraction
+        // Bind to OMR progress fraction with monotonic clamping
         scannerService.$progressFraction
             .receive(on: DispatchQueue.main)
             .sink { [weak self] progress in
                 guard let self = self, self.isProcessing else { return }
-                self.progressFraction = progress
+                self.progressFraction = max(self.progressFraction, progress)
             }
             .store(in: &cancellables)
         
-        // Bind to OMR detailed states
+        // Bind to OMR detailed states and map to 4-stage stepper
         scannerService.$currentState
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
@@ -73,15 +187,25 @@ public final class ScannerViewModel: ObservableObject {
                 case .idle:
                     break
                 case .enhancingContrast:
+                    self.currentStage = .preprocessing
+                    self.progressFraction = max(self.progressFraction, 0.20)
                     self.statusMessage = "Enhancing image contrast & clarity..."
                 case .detectingStaffSystems:
+                    self.currentStage = .recognition
+                    self.progressFraction = max(self.progressFraction, 0.40)
                     self.statusMessage = "Detecting staves & barline boundaries..."
                 case .recognizingNotesAndClefs:
+                    self.currentStage = .recognition
+                    self.progressFraction = max(self.progressFraction, 0.65)
                     self.statusMessage = "Recognizing noteheads, pitches & clefs..."
                 case .assemblingScore:
+                    self.currentStage = .assembly
+                    self.progressFraction = max(self.progressFraction, 0.85)
                     self.statusMessage = "Assembling measures & polyphony..."
                 case .completed:
-                    self.statusMessage = "Score parsed successfully! Loading player..."
+                    self.currentStage = .audioReady
+                    self.progressFraction = 1.0
+                    self.statusMessage = "Score parsed successfully! Ready for review."
                 case .failed(let msg):
                     self.statusMessage = "Recognition notice: \(msg)"
                 }
@@ -89,42 +213,124 @@ public final class ScannerViewModel: ObservableObject {
             .store(in: &cancellables)
     }
     
+    deinit {
+        stopProgressNudgeTimer()
+    }
+    
+    // MARK: - Guidance & Sensor Processing
+    
+    public func updateViewfinderGuidance(luminance: Float, fillRatio: Float, tiltDegrees: Float) {
+        self.currentLuminance = luminance
+        self.currentFillRatio = fillRatio
+        self.currentTiltDegrees = tiltDegrees
+        
+        if luminance < 0.30 {
+            currentGuidanceState = .tooDark
+        } else if luminance > 0.95 {
+            currentGuidanceState = .glareWarning
+        } else if abs(tiltDegrees) > 12.0 {
+            currentGuidanceState = .tiltWarning
+        } else if fillRatio < 0.70 {
+            currentGuidanceState = .tooFar
+        } else if fillRatio > 0.98 {
+            currentGuidanceState = .tooClose
+        } else {
+            currentGuidanceState = .readyToCapture
+        }
+    }
+    
+    // MARK: - Progress Smooth Stepper Timer
+    
+    private func startProgressNudgeTimer() {
+        stopProgressNudgeTimer()
+        progressNudgeTimer = Timer.scheduledTimer(withTimeInterval: 0.6, repeats: true) { [weak self] _ in
+            guard let self = self, self.isProcessing else { return }
+            if self.currentStage == .recognition && self.progressFraction < 0.78 {
+                self.progressFraction = min(0.78, self.progressFraction + 0.012)
+            } else if self.currentStage == .preprocessing && self.progressFraction < 0.35 {
+                self.progressFraction = min(0.35, self.progressFraction + 0.02)
+            }
+        }
+    }
+    
+    private func stopProgressNudgeTimer() {
+        progressNudgeTimer?.invalidate()
+        progressNudgeTimer = nil
+    }
+    
+    public static func categorizeError(_ errStr: String) -> String {
+        let lower = errStr.lowercased()
+        if lower.contains("429") || lower.contains("network") || lower.contains("http") || lower.contains("connect") || lower.contains("timeout") {
+            return "connectivity"
+        }
+        if lower.contains("staff") || lower.contains("stave") || lower.contains("optical") || lower.contains("omr") {
+            return "optical"
+        }
+        return "unknown"
+    }
+    
     /// Processes a captured or imported CGImage through the OMR pipeline
     public func processCapturedImage(_ cgImage: CGImage, title: String = "Scanned Sheet Music") {
         isProcessing = true
         currentStep = .processing
+        currentStage = .preprocessing
         progressFraction = 0.05
         statusMessage = "Analyzing staves & musical notation..."
+        startProgressNudgeTimer()
         
         Task { [weak self] in
             guard let self = self else { return }
             let result = await self.scannerService.processImage(cgImage, scoreTitle: title)
             
             await MainActor.run {
+                self.stopProgressNudgeTimer()
                 switch result {
                 case .success(let scanResult):
                     self.scanConfidence = scanResult.confidence.overallConfidence
                     self.capturedScore = scanResult.recognizedScore
+                    self.activeScanResult = scanResult
                     self.currentStep = .review(scanResult)
+                    self.currentStage = .audioReady
                     self.progressFraction = 1.0
                     self.statusMessage = "Recognition Complete (100%)"
+                    self.isProcessing = false
                     
-                    // 1. Immediately save to persistent storage
-                    let savedScore = self.saveAndOpenScore(score: scanResult.recognizedScore) ?? scanResult.recognizedScore
-                    
-                    // 2. Provide feedback, then transition directly to the player with smooth spring
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) {
-                        self.isProcessing = false
-                        self.onScoreAccepted?(savedScore)
-                    }
+                    // Pre-save to storage and present review sheet
+                    _ = self.saveAndOpenScore(score: scanResult.recognizedScore)
+                    self.showReviewSheet = true
                     
                 case .failure(let error):
                     self.isProcessing = false
                     self.currentStep = .camera
+                    self.currentStage = .preprocessing
                     self.progressFraction = 0.0
                     self.statusMessage = "Scan failed"
-                    self.errorMessage = "Could not recognize notation in this scan: \(error.localizedDescription)\n\nPlease ensure the sheet music is flat, well-lit, and fills the viewfinder."
-                    self.pendingFallbackScore = nil
+                    
+                    let errDesc = error.localizedDescription
+                    let cat = ScannerViewModel.categorizeError(errDesc)
+                    let fallback = RepertoireService.shared.loadFallbackPracticeScore(title: title)
+                    self.pendingFallbackScore = fallback
+                    
+                    let suggestedAction: String
+                    if cat == "optical" {
+                        suggestedAction = "Ensure sheet music is flat, well-lit, and fills 75%+ of the frame without tilt."
+                    } else if cat == "connectivity" {
+                        suggestedAction = "Gemini cloud service is busy or rate-limited. Retry in a moment or use the offline fallback practice score."
+                    } else {
+                        suggestedAction = "Ensure the sheet music is flat, well-lit, and fills the viewfinder."
+                    }
+                    
+                    let diagnostic = ScanDiagnostic(
+                        failureReason: errDesc.isEmpty ? "Notation recognition failed" : errDesc,
+                        staffCount: 0,
+                        lightingQuality: self.currentLuminance < 0.3 ? "low" : (self.currentLuminance > 0.95 ? "glare" : "adequate"),
+                        apiStatus: cat == "connectivity" ? "HTTP 429 / Connectivity Error" : "Offline OMR Active",
+                        suggestedAction: suggestedAction,
+                        fallbackScore: fallback,
+                        errorCategory: cat
+                    )
+                    self.lastDiagnostic = diagnostic
+                    self.errorMessage = "Could not recognize notation in this scan: \(errDesc)\n\n\(suggestedAction)"
                     self.showErrorAlert = true
                 }
             }
@@ -416,11 +622,34 @@ public final class ScannerViewModel: ObservableObject {
         return scoreToSave
     }
     
+    // MARK: - Review Sheet Actions
+    
+    public func acceptScanResult(_ result: ScanResult) {
+        showReviewSheet = false
+        currentStep = .camera
+        let savedScore = saveAndOpenScore(score: result.recognizedScore) ?? result.recognizedScore
+        onScoreAccepted?(savedScore)
+    }
+    
+    public func retakeFromReview() {
+        showReviewSheet = false
+        retake()
+    }
+    
+    public func viewDetails() {
+        showDetailedDiagnostics = true
+    }
+    
     public func retake() {
+        stopProgressNudgeTimer()
         scannerService.reset()
         capturedScore = nil
+        activeScanResult = nil
+        showReviewSheet = false
+        showDetailedDiagnostics = false
         currentStep = .camera
         isProcessing = false
+        currentStage = .preprocessing
         progressFraction = 0.0
         statusMessage = "Align piano sheet music within glass frame"
     }

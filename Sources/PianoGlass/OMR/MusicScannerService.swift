@@ -3,8 +3,9 @@
 //  PianoGlass
 //
 //  Optical Music Recognition coordinator service handling document capture,
-//  remote neural OMR pipeline (oemer + music21 via FastAPI),
-//  image enhancement, staff detection, and musical score synthesis.
+//  Gemini multimodal AI transcription pipeline with exponential backoff & failover,
+//  multi-page PDF rendering without squashing, adaptive lighting normalization,
+//  and resilient MusicXML 3.1 parsing.
 //
 
 import Foundation
@@ -59,6 +60,112 @@ public final class MusicScannerService: ObservableObject {
     
     public init() {}
     
+    /// Merges multiple sequential page scores into a unified, continuous Score.
+    public static func mergeScores(_ scores: [Score], baseTitle: String, composer: String = "Unknown Composer") -> Score {
+        guard let first = scores.first else {
+            return Score(title: baseTitle, composer: composer)
+        }
+        if scores.count == 1 {
+            var single = first
+            if single.title.isEmpty || single.title == "Untitled Score" {
+                single.title = baseTitle
+            }
+            if single.composer.isEmpty || single.composer == "Unknown Composer" {
+                single.composer = composer
+            }
+            return single
+        }
+        
+        var mergedMeasures = [Measure]()
+        var currentBeatOffset: Double = 0.0
+        var currentMeasureIndex: Int = 0
+        
+        for score in scores {
+            for measure in score.measures {
+                let updatedNotes = measure.notes.map { note in
+                    NoteEvent(
+                        id: note.id,
+                        pitch: note.pitch,
+                        startBeat: note.startBeat + currentBeatOffset,
+                        durationBeats: note.durationBeats,
+                        velocity: note.velocity,
+                        hand: note.hand,
+                        measureIndex: currentMeasureIndex,
+                        isRest: note.isRest,
+                        accidental: note.accidental,
+                        isTiedContinuation: note.isTiedContinuation
+                    )
+                }
+                
+                let updatedMeasure = Measure(
+                    id: UUID(),
+                    index: currentMeasureIndex,
+                    startBeat: measure.startBeat + currentBeatOffset,
+                    durationBeats: measure.durationBeats,
+                    timeSignature: measure.timeSignature,
+                    keySignature: measure.keySignature,
+                    notes: updatedNotes,
+                    boundingBox: measure.boundingBox
+                )
+                mergedMeasures.append(updatedMeasure)
+                currentMeasureIndex += 1
+            }
+            currentBeatOffset += score.totalBeats
+        }
+        
+        return Score(
+            id: UUID(),
+            title: baseTitle.isEmpty ? first.title : baseTitle,
+            composer: composer.isEmpty ? first.composer : composer,
+            defaultBPM: first.defaultBPM,
+            timeSignature: first.timeSignature,
+            keySignature: first.keySignature,
+            measures: mergedMeasures
+        )
+    }
+    
+    /// Renders all pages of a PDF individually at high resolution without squashing.
+    public func renderPDFPagesIndividually(data: Data, scale: CGFloat = 2.0) -> [CGImage] {
+        #if canImport(PDFKit)
+        guard let pdfDoc = PDFDocument(data: data), pdfDoc.pageCount > 0 else { return [] }
+        var result = [CGImage]()
+        for i in 0..<pdfDoc.pageCount {
+            guard let page = pdfDoc.page(at: i) else { continue }
+            let bounds = page.bounds(for: .mediaBox)
+            let w = Int(bounds.width * scale)
+            let h = Int(bounds.height * scale)
+            guard w > 0 && h > 0 else { continue }
+            
+            let colorSpace = CGColorSpaceCreateDeviceRGB()
+            guard let ctx = CGContext(
+                data: nil,
+                width: w,
+                height: h,
+                bitsPerComponent: 8,
+                bytesPerRow: w * 4,
+                space: colorSpace,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ) else { continue }
+            
+            // White background
+            ctx.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+            ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
+            
+            ctx.saveGState()
+            ctx.scaleBy(x: scale, y: scale)
+            page.draw(with: .mediaBox, to: ctx)
+            ctx.restoreGState()
+            
+            if let img = ctx.makeImage() {
+                result.append(img)
+            }
+        }
+        return result
+        #else
+        return []
+        #endif
+    }
+    
     /// Processes a sheet music CGImage through the OMR pipeline.
     /// When an OMR backend is configured and reachable, uses neural oemer + music21.
     /// Gracefully falls back to on-device Vision detection if offline.
@@ -73,11 +180,11 @@ public final class MusicScannerService: ObservableObject {
         let (deskewedImage, _) = VisionStaffDetector.deskewCGImage(cgImage)
         let workingImage = deskewedImage
         
-        // 0. Tier 1: Direct On-Device Multimodal AI with Gemini 2.5 Flash / 2.0 Flash-Lite
+        // 0. Tier 1: Direct On-Device Multimodal AI with Gemini 3.8 Flash / 3.5 Flash-Lite
         let geminiKey = UserDefaults.standard.string(forKey: "geminiAPIKey")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !geminiKey.isEmpty {
-            // Enhance contrast/sharpness for better Gemini OCR accuracy
-            let enhancedImage = enhanceImageForOMR(workingImage)
+            // Adaptive lighting normalization & sharpening for optimal Gemini OCR accuracy
+            let enhancedImage = MusicScannerService.enhanceImageForOMR(workingImage)
             if let jpegData = cgImageToJPEGData(enhancedImage) {
                 do {
                     await updateState(.enhancingContrast, progress: 0.20)
@@ -140,7 +247,8 @@ public final class MusicScannerService: ObservableObject {
                 
                 await updateState(.assemblingScore, progress: 0.85)
                 let parser = MusicXMLParser()
-                if let parsedScore = parser.parse(xmlString: response.musicxml), !parsedScore.measures.isEmpty {
+                let cleanXML = MusicXMLRepairEngine.repairTruncatedXML(response.musicxml)
+                if let parsedScore = parser.parse(xmlString: cleanXML), !parsedScore.measures.isEmpty {
                     var finalScore = parsedScore
                     if finalScore.title.isEmpty || finalScore.title == "Untitled Score" {
                         finalScore.title = (response.title?.isEmpty == false) ? response.title! : scoreTitle
@@ -175,7 +283,7 @@ public final class MusicScannerService: ObservableObject {
         try? await Task.sleep(nanoseconds: 150_000_000)
         
         await updateState(.detectingStaffSystems, progress: 0.45)
-        let systems = await staffDetector.detectStaves(in: cgImage)
+        let systems = await staffDetector.detectStaves(in: workingImage)
         
         #if DEBUG
         print("[MusicScannerService] Local OMR: detected \(systems.count) staff system(s).")
@@ -190,7 +298,7 @@ public final class MusicScannerService: ObservableObject {
         await updateState(.assemblingScore, progress: 0.90)
         let recognizedScore = noteEngine.recognizeScore(
             from: systems,
-            image: cgImage,
+            image: workingImage,
             title: scoreTitle,
             composer: composer
         )
@@ -199,8 +307,6 @@ public final class MusicScannerService: ObservableObject {
         print("[MusicScannerService] Local OMR result: \(recognizedScore.measures.count) measures, \(recognizedScore.allNotes.count) notes.")
         #endif
         
-        // If recognition produced no notes, surface a real error instead of silently
-        // succeeding with an empty score (which would play nothing or fake fallback music).
         if recognizedScore.measures.isEmpty || recognizedScore.allNotes.isEmpty {
             let errorMsg = "On-device OMR could not detect any musical notation in this image. " +
                            "Ensure the image shows clearly printed sheet music with visible staff lines. " +
@@ -242,9 +348,9 @@ public final class MusicScannerService: ObservableObject {
         await updateState(.completed(recognizedScore), progress: 1.0)
         return .success(scanResult)
     }
-
     
-    /// Processes raw document data (PDF or image) by sending to the OMR backend.
+    /// Processes raw document data (PDF or image) with universal deskewing, lighting normalization,
+    /// and multi-page sequential transcription and merging.
     public func processDocumentData(
         _ data: Data,
         mimeType: String,
@@ -255,67 +361,106 @@ public final class MusicScannerService: ObservableObject {
         let startTime = Date()
         let geminiKey = UserDefaults.standard.string(forKey: "geminiAPIKey")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         
-        // Tier 1: Direct On-Device Multimodal AI with Gemini 2.5 Flash / 2.0 Flash-Lite
-        if !geminiKey.isEmpty {
-            // For PDFs: render all pages stitched into one tall image for complete transcription
-            let geminiData: Data
-            let geminiMime: String
-            if mimeType == "application/pdf",
-               let stitchedImage = renderAllPDFPages(data: data),
-               let jpegData = cgImageToJPEGData(enhanceImageForOMR(stitchedImage)) {
-                geminiData = jpegData
-                geminiMime = "image/jpeg"
-            } else if mimeType.hasPrefix("image/"),
-                      let cgSrc = { () -> CGImage? in
-                          #if canImport(UIKit)
-                          return UIImage(data: data)?.cgImage
-                          #else
-                          return nil
-                          #endif
-                      }(),
-                      let jpegData = cgImageToJPEGData(enhanceImageForOMR(cgSrc)) {
-                geminiData = jpegData
-                geminiMime = "image/jpeg"
-            } else {
-                geminiData = data
-                geminiMime = mimeType
-            }
-            do {
-                await updateState(.enhancingContrast, progress: 0.20)
-                await updateState(.detectingStaffSystems, progress: 0.40)
-                await updateState(.recognizingNotesAndClefs, progress: 0.70)
-                
-                if let score = try await transcribeWithGeminiAI(
-                    data: geminiData,
-                    mimeType: geminiMime,
-                    apiKey: geminiKey,
-                    scoreTitle: scoreTitle
-                ) {
-                    let duration = Date().timeIntervalSince(startTime)
-                    let scanResult = ScanResult(
-                        recognizedScore: score,
-                        confidence: ScanConfidenceScore(
-                            staffDetectionConfidence: 0.99,
-                            noteheadConfidence: 0.99,
-                            rhythmConsistencyConfidence: 0.98
-                        ),
-                        staffSystems: [],
-                        rawNoteCount: score.allNotes.count,
-                        processingDurationSeconds: duration
-                    )
-                    await updateState(.completed(score), progress: 1.0)
-                    return .success(scanResult)
+        // Multi-page PDF document pipeline: render each page individually at high DPI
+        if mimeType == "application/pdf" {
+            let pages = renderPDFPagesIndividually(data: data, scale: 2.0)
+            if !pages.isEmpty {
+                // Tier 1: Direct Gemini Multimodal AI
+                if !geminiKey.isEmpty {
+                    var pageScores = [Score]()
+                    for (idx, pageCG) in pages.enumerated() {
+                        let (deskewed, _) = VisionStaffDetector.deskewCGImage(pageCG)
+                        let enhanced = MusicScannerService.enhanceImageForOMR(deskewed)
+                        guard let jpegData = cgImageToJPEGData(enhanced, maxDimension: 3000) else { continue }
+                        
+                        let stepProgress = 0.20 + (0.65 * Double(idx) / Double(pages.count))
+                        await updateState(.recognizingNotesAndClefs, progress: stepProgress)
+                        
+                        let pageTitle = pages.count > 1 ? "\(scoreTitle) - Page \(idx + 1)" : scoreTitle
+                        do {
+                            if let pageScore = try await transcribeWithGeminiAI(
+                                data: jpegData,
+                                mimeType: "image/jpeg",
+                                apiKey: geminiKey,
+                                scoreTitle: pageTitle
+                            ) {
+                                pageScores.append(pageScore)
+                            }
+                        } catch {
+                            #if DEBUG
+                            print("[MusicScannerService] Page \(idx + 1) Gemini transcription error: \(error.localizedDescription)")
+                            #endif
+                        }
+                    }
+                    
+                    if !pageScores.isEmpty {
+                        let mergedScore = MusicScannerService.mergeScores(pageScores, baseTitle: scoreTitle, composer: composer)
+                        let duration = Date().timeIntervalSince(startTime)
+                        let scanResult = ScanResult(
+                            recognizedScore: mergedScore,
+                            confidence: ScanConfidenceScore(
+                                staffDetectionConfidence: 0.99,
+                                noteheadConfidence: 0.99,
+                                rhythmConsistencyConfidence: 0.98
+                            ),
+                            staffSystems: [],
+                            rawNoteCount: mergedScore.allNotes.count,
+                            processingDurationSeconds: duration
+                        )
+                        await updateState(.completed(mergedScore), progress: 1.0)
+                        return .success(scanResult)
+                    }
                 }
-            } catch {
-                #if DEBUG
-                print("[MusicScannerService] Direct Gemini AI notice for document: \(error.localizedDescription). Proceeding to remote OMR.")
-                #endif
+            }
+        } else if mimeType.hasPrefix("image/"),
+                  let cgSrc = { () -> CGImage? in
+                      #if canImport(UIKit)
+                      return UIImage(data: data)?.cgImage
+                      #else
+                      return nil
+                      #endif
+                  }() {
+            // Single image import: perform universal deskew and adaptive enhancement
+            let (deskewed, _) = VisionStaffDetector.deskewCGImage(cgSrc)
+            let enhanced = MusicScannerService.enhanceImageForOMR(deskewed)
+            
+            if !geminiKey.isEmpty, let jpegData = cgImageToJPEGData(enhanced, maxDimension: 3000) {
+                do {
+                    await updateState(.enhancingContrast, progress: 0.20)
+                    await updateState(.detectingStaffSystems, progress: 0.40)
+                    await updateState(.recognizingNotesAndClefs, progress: 0.70)
+                    
+                    if let score = try await transcribeWithGeminiAI(
+                        data: jpegData,
+                        mimeType: "image/jpeg",
+                        apiKey: geminiKey,
+                        scoreTitle: scoreTitle
+                    ) {
+                        let duration = Date().timeIntervalSince(startTime)
+                        let scanResult = ScanResult(
+                            recognizedScore: score,
+                            confidence: ScanConfidenceScore(
+                                staffDetectionConfidence: 0.99,
+                                noteheadConfidence: 0.99,
+                                rhythmConsistencyConfidence: 0.98
+                            ),
+                            staffSystems: [],
+                            rawNoteCount: score.allNotes.count,
+                            processingDurationSeconds: duration
+                        )
+                        await updateState(.completed(score), progress: 1.0)
+                        return .success(scanResult)
+                    }
+                } catch {
+                    #if DEBUG
+                    print("[MusicScannerService] Direct Gemini AI notice for photo: \(error.localizedDescription). Proceeding to remote OMR.")
+                    #endif
+                }
             }
         }
-
         
+        // Remote OMR fallback
         let serverURL = UserDefaults.standard.string(forKey: "omrBackendURL") ?? "http://localhost:8000"
-        
         do {
             await updateState(.enhancingContrast, progress: 0.20)
             await updateState(.detectingStaffSystems, progress: 0.50)
@@ -330,7 +475,8 @@ public final class MusicScannerService: ObservableObject {
             
             await updateState(.assemblingScore, progress: 0.85)
             let parser = MusicXMLParser()
-            guard let parsedScore = parser.parse(xmlString: response.musicxml), !parsedScore.measures.isEmpty else {
+            let cleanXML = MusicXMLRepairEngine.repairTruncatedXML(response.musicxml)
+            guard let parsedScore = parser.parse(xmlString: cleanXML), !parsedScore.measures.isEmpty else {
                 throw NSError(domain: "PianoGlassOMR", code: 2, userInfo: [NSLocalizedDescriptionKey: "Failed to parse MusicXML from server."])
             }
             
@@ -363,20 +509,6 @@ public final class MusicScannerService: ObservableObject {
         }
     }
     
-    // MARK: - Networking
-    
-    private func normalizeBackendURL(_ input: String) -> URL? {
-        var raw = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !raw.isEmpty else { return nil }
-        if !raw.lowercased().hasPrefix("http://") && !raw.lowercased().hasPrefix("https://") {
-            raw = "http://" + raw
-        }
-        while raw.hasSuffix("/") {
-            raw.removeLast()
-        }
-        return URL(string: raw)
-    }
-    
     private func sendToRemoteOMR(
         data: Data,
         mimeType: String,
@@ -384,57 +516,36 @@ public final class MusicScannerService: ObservableObject {
         scoreTitle: String,
         backendURLString: String
     ) async throws -> RemoteTranscribeResponse {
-        guard let baseURL = normalizeBackendURL(backendURLString),
-              let endpoint = URL(string: "\(baseURL.absoluteString)/api/transcribe") else {
+        guard let url = URL(string: "\(backendURLString)/api/transcribe") else {
             throw URLError(.badURL)
         }
-        var request = URLRequest(url: endpoint)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 45.0
         
         let boundary = "Boundary-\(UUID().uuidString)"
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        
-        // Attach Gemini API key and model headers if configured
-        let geminiKey = UserDefaults.standard.string(forKey: "geminiAPIKey")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let geminiModel = UserDefaults.standard.string(forKey: "geminiModel") ?? "gemini-3.8-flash"
-        if !geminiKey.isEmpty {
-            request.setValue(geminiKey, forHTTPHeaderField: "X-Gemini-API-Key")
-            request.setValue(geminiModel, forHTTPHeaderField: "X-Gemini-Model")
-        }
+        request.timeoutInterval = 90.0
         
         var body = Data()
-        
-        // Add title form field
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"title\"\r\n\r\n".data(using: .utf8)!)
-        body.append("\(scoreTitle)\r\n".data(using: .utf8)!)
-        
-        // Add gemini_api_key and gemini_model form fields if present
-        if !geminiKey.isEmpty {
-            body.append("--\(boundary)\r\n".data(using: .utf8)!)
-            body.append("Content-Disposition: form-data; name=\"gemini_api_key\"\r\n\r\n".data(using: .utf8)!)
-            body.append("\(geminiKey)\r\n".data(using: .utf8)!)
-            
-            body.append("--\(boundary)\r\n".data(using: .utf8)!)
-            body.append("Content-Disposition: form-data; name=\"gemini_model\"\r\n\r\n".data(using: .utf8)!)
-            body.append("\(geminiModel)\r\n".data(using: .utf8)!)
-        }
-        
-        // Add file field
+        // File field
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
         body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(fileName)\"\r\n".data(using: .utf8)!)
         body.append("Content-Type: \(mimeType)\r\n\r\n".data(using: .utf8)!)
         body.append(data)
         body.append("\r\n".data(using: .utf8)!)
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
         
+        // Title field
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"title\"\r\n\r\n".data(using: .utf8)!)
+        body.append("\(scoreTitle)\r\n".data(using: .utf8)!)
+        
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
         request.httpBody = body
         
         let (responseData, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
             let code = (response as? HTTPURLResponse)?.statusCode ?? -1
-            throw NSError(domain: "PianoGlassOMR", code: code, userInfo: [NSLocalizedDescriptionKey: "Server returned error code \(code)"])
+            throw NSError(domain: "PianoGlassOMR", code: code, userInfo: [NSLocalizedDescriptionKey: "Remote OMR server returned error \(code)"])
         }
         
         let decoded = try JSONDecoder().decode(RemoteTranscribeResponse.self, from: responseData)
@@ -548,80 +659,97 @@ public final class MusicScannerService: ObservableObject {
             ],
             "generationConfig": [
                 "temperature": 0.05,
-                "maxOutputTokens": 32768
+                "maxOutputTokens": 32768,
+                "thinkingConfig": [
+                    "thinkingBudget": 1024
+                ]
             ]
         ]
         
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 90.0
-        request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
+        let requestBody = try JSONSerialization.data(withJSONObject: payload, options: [])
         
-        let (responseData, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
-            let code = (response as? HTTPURLResponse)?.statusCode ?? -1
-            throw NSError(domain: "PianoGlassOMR", code: code, userInfo: [NSLocalizedDescriptionKey: "Gemini API (\(model)) returned HTTP \(code)"])
-        }
+        var attempts = 0
+        let maxRetries = 3
+        var currentDelay = 1.0
+        var lastHTTPCode = -1
         
-        guard let json = try JSONSerialization.jsonObject(with: responseData, options: []) as? [String: Any],
-              let candidates = json["candidates"] as? [[String: Any]],
-              let firstCandidate = candidates.first,
-              let content = firstCandidate["content"] as? [String: Any],
-              let parts = content["parts"] as? [[String: Any]],
-              let firstPart = parts.first,
-              let rawText = firstPart["text"] as? String else {
-            throw NSError(domain: "PianoGlassOMR", code: 3, userInfo: [NSLocalizedDescriptionKey: "Could not parse Gemini response JSON."])
-        }
-        
-        var cleanXML = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if cleanXML.contains("```xml") {
-            if let start = cleanXML.range(of: "```xml") {
-                cleanXML = String(cleanXML[start.upperBound...])
+        while attempts <= maxRetries {
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.timeoutInterval = 90.0
+            request.httpBody = requestBody
+            
+            let responseData: Data
+            let response: URLResponse
+            do {
+                (responseData, response) = try await URLSession.shared.data(for: request)
+            } catch {
+                if attempts < maxRetries {
+                    attempts += 1
+                    let jitter = Double.random(in: 0.1...0.5)
+                    try await Task.sleep(nanoseconds: UInt64((currentDelay + jitter) * 1_000_000_000))
+                    currentDelay *= 2.0
+                    continue
+                }
+                throw error
             }
-        } else if cleanXML.contains("```") {
-            if let start = cleanXML.range(of: "```") {
-                cleanXML = String(cleanXML[start.upperBound...])
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw URLError(.badServerResponse)
             }
-        }
-        if let end = cleanXML.range(of: "```") {
-            cleanXML = String(cleanXML[..<end.lowerBound])
-        }
-        cleanXML = cleanXML.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        if let startTag = cleanXML.range(of: "<?xml") {
-            cleanXML = String(cleanXML[startTag.lowerBound...])
-        } else if let startTag = cleanXML.range(of: "<score-partwise") {
-            cleanXML = String(cleanXML[startTag.lowerBound...])
-        }
-        if let endTag = cleanXML.range(of: "</score-partwise>", options: .backwards) {
-            cleanXML = String(cleanXML[..<endTag.upperBound])
-        }
-        
-        guard cleanXML.contains("<score-partwise") else {
-            throw NSError(domain: "PianoGlassOMR", code: 4, userInfo: [NSLocalizedDescriptionKey: "Response did not contain valid MusicXML notation."])
-        }
-        
-        await updateState(.assemblingScore, progress: 0.90)
-        let parser = MusicXMLParser()
-        if var parsedScore = parser.parse(xmlString: cleanXML), !parsedScore.measures.isEmpty {
-            if parsedScore.title.isEmpty || parsedScore.title == "Untitled Score" {
-                parsedScore.title = scoreTitle
+            
+            lastHTTPCode = httpResponse.statusCode
+            if (lastHTTPCode == 429 || lastHTTPCode == 503) && attempts < maxRetries {
+                attempts += 1
+                let jitter = Double.random(in: 0.1...0.5)
+                let delay = currentDelay + jitter
+                #if DEBUG
+                print("[MusicScannerService] Gemini (\(model)) returned HTTP \(lastHTTPCode). Backing off for \(String(format: "%.2f", delay))s (retry \(attempts)/\(maxRetries)).")
+                #endif
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                currentDelay *= 2.0
+                continue
             }
-            return parsedScore
+            
+            guard (200...299).contains(lastHTTPCode) else {
+                throw NSError(domain: "PianoGlassOMR", code: lastHTTPCode, userInfo: [NSLocalizedDescriptionKey: "Gemini API (\(model)) returned HTTP \(lastHTTPCode)"])
+            }
+            
+            guard let json = try JSONSerialization.jsonObject(with: responseData, options: []) as? [String: Any],
+                  let candidates = json["candidates"] as? [[String: Any]],
+                  let firstCandidate = candidates.first,
+                  let content = firstCandidate["content"] as? [String: Any],
+                  let parts = content["parts"] as? [[String: Any]],
+                  let firstPart = parts.first,
+                  let rawText = firstPart["text"] as? String else {
+                throw NSError(domain: "PianoGlassOMR", code: 3, userInfo: [NSLocalizedDescriptionKey: "Could not parse Gemini response JSON."])
+            }
+            
+            let repairedXML = MusicXMLRepairEngine.repairTruncatedXML(rawText)
+            guard !repairedXML.isEmpty && repairedXML.contains("<score-partwise") else {
+                throw NSError(domain: "PianoGlassOMR", code: 4, userInfo: [NSLocalizedDescriptionKey: "Response did not contain valid MusicXML notation."])
+            }
+            
+            await updateState(.assemblingScore, progress: 0.90)
+            let parser = MusicXMLParser()
+            if var parsedScore = parser.parse(xmlString: repairedXML), !parsedScore.measures.isEmpty {
+                if parsedScore.title.isEmpty || parsedScore.title == "Untitled Score" {
+                    parsedScore.title = scoreTitle
+                }
+                return parsedScore
+            }
+            return nil
         }
-        return nil
+        
+        throw NSError(domain: "PianoGlassOMR", code: lastHTTPCode, userInfo: [NSLocalizedDescriptionKey: "Gemini API (\(model)) failed after retries with HTTP \(lastHTTPCode)"])
     }
     
     private func cgImageToData(_ cgImage: CGImage) -> Data? {
-        // Use PNG (lossless) to preserve full pixel fidelity for OMR accuracy.
-        // JPEG compression at any quality level degrades fine-grained ink strokes
-        // (staff lines, noteheads, accidentals) causing false pitch detections.
         #if canImport(UIKit)
         if let pngData = UIImage(cgImage: cgImage).pngData() {
             return pngData
         }
-        // PNG fallback: high-quality JPEG only if PNG fails (memory pressure)
         return UIImage(cgImage: cgImage).jpegData(compressionQuality: 0.98)
         #elseif canImport(ImageIO) && canImport(UniformTypeIdentifiers)
         let mutableData = NSMutableData()
@@ -636,94 +764,57 @@ public final class MusicScannerService: ObservableObject {
         #endif
     }
     
-    /// Applies a CIFilter enhancement pipeline to prepare a sheet music image for Gemini OMR.
-    /// Steps: grayscale desaturation → contrast boost → unsharp mask sharpening.
+    /// Applies an adaptive lighting normalization and contrast enhancement pipeline for sheet music images.
+    /// Steps: shadow illumination lifting → desaturation & contrast boost → unsharp mask sharpening.
     @discardableResult
-    private func enhanceImageForOMR(_ cgImage: CGImage) -> CGImage {
+    public static func enhanceImageForOMR(_ cgImage: CGImage) -> CGImage {
         #if canImport(CoreImage)
         let ciImage = CIImage(cgImage: cgImage)
+        var workingCI = ciImage
         
-        // Step 1: Color controls — desaturate to grayscale, boost contrast, brighten slightly
-        guard let colorFilter = CIFilter(name: "CIColorControls") else { return cgImage }
-        colorFilter.setValue(ciImage, forKey: kCIInputImageKey)
-        colorFilter.setValue(1.25, forKey: kCIInputContrastKey)
-        colorFilter.setValue(0.0,  forKey: kCIInputSaturationKey)
-        colorFilter.setValue(0.05, forKey: kCIInputBrightnessKey)
-        guard let colorOut = colorFilter.outputImage else { return cgImage }
+        // Step 1: Adaptive lighting normalization / shadow lifting
+        if let shadowFilter = CIFilter(name: "CIHighlightShadowAdjust") {
+            shadowFilter.setValue(workingCI, forKey: kCIInputImageKey)
+            shadowFilter.setValue(0.40, forKey: "inputShadowAmount")
+            shadowFilter.setValue(0.90, forKey: "inputHighlightAmount")
+            if let shadowOut = shadowFilter.outputImage {
+                workingCI = shadowOut
+            }
+        }
         
-        // Step 2: Unsharp mask — sharpen fine staff lines and noteheads
-        guard let unsharpFilter = CIFilter(name: "CIUnsharpMask") else { return cgImage }
-        unsharpFilter.setValue(colorOut, forKey: kCIInputImageKey)
-        unsharpFilter.setValue(1.5,  forKey: kCIInputRadiusKey)
-        unsharpFilter.setValue(0.7,  forKey: kCIInputIntensityKey)
-        guard let unsharpOut = unsharpFilter.outputImage else { return cgImage }
+        // Step 2: Grayscale desaturation and contrast boost for sharp barlines, noteheads, and accidentals
+        if let colorFilter = CIFilter(name: "CIColorControls") {
+            colorFilter.setValue(workingCI, forKey: kCIInputImageKey)
+            colorFilter.setValue(1.35, forKey: kCIInputContrastKey)
+            colorFilter.setValue(0.0,  forKey: kCIInputSaturationKey)
+            colorFilter.setValue(0.05, forKey: kCIInputBrightnessKey)
+            if let colorOut = colorFilter.outputImage {
+                workingCI = colorOut
+            }
+        }
+        
+        // Step 3: Unsharp mask — crisp delineation of thin staff lines and ledger lines
+        if let unsharpFilter = CIFilter(name: "CIUnsharpMask") {
+            unsharpFilter.setValue(workingCI, forKey: kCIInputImageKey)
+            unsharpFilter.setValue(2.0,  forKey: kCIInputRadiusKey)
+            unsharpFilter.setValue(0.85, forKey: kCIInputIntensityKey)
+            if let unsharpOut = unsharpFilter.outputImage {
+                workingCI = unsharpOut
+            }
+        }
         
         let context = CIContext(options: [.useSoftwareRenderer: false])
-        let extent = unsharpOut.extent
-        guard let rendered = context.createCGImage(unsharpOut, from: extent) else { return cgImage }
+        let extent = workingCI.extent
+        guard let rendered = context.createCGImage(workingCI, from: extent) else { return cgImage }
         return rendered
         #else
         return cgImage
         #endif
     }
     
-    /// Renders all pages of a PDF document vertically stitched into one tall CGImage.
-    /// This ensures Gemini sees the complete score rather than just the first page.
-    private func renderAllPDFPages(data: Data) -> CGImage? {
-        #if canImport(PDFKit)
-        guard let pdfDoc = PDFDocument(data: data), pdfDoc.pageCount > 0 else { return nil }
-        
-        // Determine total canvas size (pages stacked vertically at PDF point scale × 2 for retina)
-        let scale: CGFloat = 2.0
-        var totalHeight: CGFloat = 0
-        var maxWidth: CGFloat = 0
-        var pageSizes = [CGSize]()
-        
-        for i in 0..<pdfDoc.pageCount {
-            guard let page = pdfDoc.page(at: i) else { continue }
-            let bounds = page.bounds(for: .mediaBox)
-            let w = bounds.width * scale
-            let h = bounds.height * scale
-            pageSizes.append(CGSize(width: w, height: h))
-            totalHeight += h
-            if w > maxWidth { maxWidth = w }
-        }
-        
-        guard maxWidth > 0 && totalHeight > 0 else { return nil }
-        let canvasWidth = Int(maxWidth)
-        let canvasHeight = Int(totalHeight)
-        
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-        guard let ctx = CGContext(
-            data: nil,
-            width: canvasWidth,
-            height: canvasHeight,
-            bitsPerComponent: 8,
-            bytesPerRow: canvasWidth * 4,
-            space: colorSpace,
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else { return nil }
-        
-        // Fill with white background
-        ctx.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
-        ctx.fill(CGRect(x: 0, y: 0, width: canvasWidth, height: canvasHeight))
-        
-        // Draw each page top-to-bottom (CoreGraphics origin is bottom-left)
-        var yOffset: CGFloat = totalHeight
-        for (i, size) in pageSizes.enumerated() {
-            guard let page = pdfDoc.page(at: i) else { continue }
-            yOffset -= size.height
-            ctx.saveGState()
-            ctx.translateBy(x: 0, y: yOffset)
-            ctx.scaleBy(x: scale, y: scale)
-            page.draw(with: .mediaBox, to: ctx)
-            ctx.restoreGState()
-        }
-        
-        return ctx.makeImage()
-        #else
-        return nil
-        #endif
+    @discardableResult
+    public func enhanceImageForOMR(_ cgImage: CGImage) -> CGImage {
+        return MusicScannerService.enhanceImageForOMR(cgImage)
     }
     
     @MainActor

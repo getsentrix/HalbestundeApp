@@ -50,6 +50,24 @@ jobs:
             python3 scripts/bump_version.py --bump "$BUMP_TYPE"
           fi
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: 'backend/requirements.txt'
+
+      - name: Install Verification Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Run Mandatory Automated Verification Pipeline
+        run: |
+          python Tests/test_e2e_verification.py
+          python scripts/verify_logic.py
+          pytest Tests/test_backend.py
+
       - name: Select Xcode 15
         run: sudo xcode-select -switch /Applications/Xcode_15.4.app/Contents/Developer
 
@@ -96,9 +114,11 @@ jobs:
           Automated update release for AltStore & LiveContainer.
 
           #### Changes
-          - Clean minimal feather-inspired sheet music scanner
-          - On-device acoustic grand piano audio engine
-          - Secure score storage in encrypted application sandbox
+          - Gemini Multimodal AI Transcription: High-fidelity cloud AI transcription pipeline with exponential backoff on HTTP 429/503 and streaming MusicXML 3.1 tag repair
+          - On-Device OMR Fallback: Overhauled offline computer vision fallback featuring strip-based staff tracking, notehead morphology, and multi-staff beat quantizer
+          - Guided Viewfinder & Multi-Stage UX: Real-time guidance for lighting, tilt, and distance with a 4-stage recognition stepper and actionable fallback diagnostics
+          - Acoustic Grand Piano Engine: Pure native iOS polyphonic playback with hand isolation and synchronized waterfall visualization
+          - Verified Manifests & Release: Synchronized release manifests with automated CI verification gates
 
           #### Sideloading
           - **AltStore / LiveContainer Source**: https://getsentrix.github.io/PianoGlass/apps.json
@@ -119,10 +139,23 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add apps.json docs/apps.json altstore.json docs/altstore.json docs/index.html index.html Sources/PianoGlass/App/Info.plist PianoGlass.xcodeproj/project.pbxproj
+          git add apps.json docs/apps.json altstore.json docs/altstore.json docs/index.html index.html \
+            Sources/PianoGlass/App/Info.plist PianoGlass.xcodeproj/project.pbxproj \
+            Sources/PianoGlass/Views/Settings/SettingsView.swift scripts/patch_ipa.py
           git commit -m "chore(release): bump version to $TAG [skip ci]" || echo "No changes to commit"
-          git pull --rebase origin master
-          git push origin master
+
+          # Determine release branch (support master and main)
+          TARGET_BRANCH="${GITHUB_REF_NAME:-$(git branch --show-current)}"
+          if [ -z "$TARGET_BRANCH" ] || [ "$TARGET_BRANCH" = "HEAD" ]; then
+            if git show-ref --quiet refs/remotes/origin/main; then
+              TARGET_BRANCH="main"
+            else
+              TARGET_BRANCH="master"
+            fi
+          fi
+          echo "Pushing manifest updates to origin $TARGET_BRANCH..."
+          git pull --rebase origin "$TARGET_BRANCH"
+          git push origin "$TARGET_BRANCH"
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4

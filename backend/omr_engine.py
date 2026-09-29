@@ -21,10 +21,13 @@ import shutil
 import copy
 import math
 import json
+import time
+import random
+import re
 import urllib.request
 import urllib.error
 from typing import List, Tuple, Optional, Dict, Any
-from PIL import Image, ImageOps, ImageFilter
+from PIL import Image, ImageOps, ImageFilter, ImageEnhance
 import numpy as np
 
 import music21
@@ -297,6 +300,105 @@ def run_oemer_transcription(image: Image.Image, output_dir: str) -> Optional[str
     return None
 
 
+def repair_truncated_musicxml(raw_text: str) -> Optional[str]:
+    """
+    Resilient streaming repair engine for MusicXML 3.1:
+    Recovers completed measures from token-truncated responses,
+    sanitizes XML entities, and ensures valid XML hierarchy.
+    """
+    if not raw_text:
+        return None
+    text = raw_text.strip()
+    if "```xml" in text:
+        text = text.split("```xml", 1)[1].split("```", 1)[0].strip()
+    elif "```" in text:
+        text = text.split("```", 1)[1].split("```", 1)[0].strip()
+    
+    # Locate start of XML
+    start_idx = text.find("<?xml")
+    if start_idx == -1:
+        start_idx = text.find("<score-partwise")
+    if start_idx != -1:
+        text = text[start_idx:].strip()
+    elif "<measure" in text:
+        # Synthesize minimal envelope if raw measures or parts were returned
+        text = (
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<score-partwise version="3.1">\n'
+            '  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>\n'
+            '  <part id="P1">\n' + text
+        )
+    else:
+        return None
+    
+    # Sanitize naked ampersands
+    text = re.sub(r"&(?!(amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)", "&amp;", text)
+    
+    # Ensure <part-list> and <part id="P1"> exist before measures
+    if "<part-list>" not in text and "<measure" in text:
+        first_m = text.find("<measure")
+        part_idx = -1
+        p_space = text.find("<part ")
+        p_tag = text.find("<part>")
+        if p_space != -1 and (p_tag == -1 or p_space < p_tag):
+            part_idx = p_space
+        elif p_tag != -1:
+            part_idx = p_tag
+            
+        if part_idx != -1 and part_idx < first_m:
+            prefix = text[:part_idx]
+            suffix = text[part_idx:]
+            text = (
+                prefix + "\n  <part-list>\n    <score-part id=\"P1\"><part-name>Piano</part-name></score-part>\n  </part-list>\n" + suffix
+            )
+        else:
+            prefix = text[:first_m]
+            suffix = text[first_m:]
+            text = (
+                prefix + "\n  <part-list>\n    <score-part id=\"P1\"><part-name>Piano</part-name></score-part>\n  </part-list>\n  <part id=\"P1\">\n" + suffix
+            )
+    
+    # Check if closing tag exists cleanly
+    end_idx = text.rfind("</score-partwise>")
+    if end_idx != -1:
+        clean = text[:end_idx + len("</score-partwise>")].strip()
+        try:
+            ET.fromstring(clean)
+            return clean
+        except Exception:
+            pass
+            
+    # Truncated response: scan for last complete </measure>
+    last_measure_idx = text.rfind("</measure>")
+    if last_measure_idx != -1:
+        repaired = text[:last_measure_idx + len("</measure>")].strip()
+        open_parts = repaired.count("<part ") + repaired.count("<part>")
+        close_parts = repaired.count("</part>")
+        if open_parts > close_parts:
+            repaired += "\n  </part>"
+        if "</score-partwise>" not in repaired:
+            repaired += "\n</score-partwise>"
+        try:
+            ET.fromstring(repaired)
+            return repaired
+        except Exception as e:
+            logger.warning(f"XML repair attempt failed: {e}")
+    else:
+        # Measure 1 truncation: when no complete </measure> exists, synthesize valid minimal envelope
+        if "<measure" in text:
+            envelope = (
+                '<?xml version="1.0" encoding="UTF-8"?>\n'
+                '<score-partwise version="3.1">\n'
+                '  <part-list>\n'
+                '    <score-part id="P1"><part-name>Piano</part-name></score-part>\n'
+                '  </part-list>\n'
+                '  <part id="P1"></part>\n'
+                '</score-partwise>'
+            )
+            return envelope
+    return None
+
+
 def run_cloud_ai_transcription(
     image: Image.Image,
     gemini_key: Optional[str] = None,
@@ -317,15 +419,26 @@ def run_cloud_ai_transcription(
         models_to_try = [preferred_model, fallback_model]
         
         try:
+            # Universal deskew
+            deskewed_img, angle = deskew_image(image)
+            working_img = deskewed_img if abs(angle) >= 0.15 else image
+            
+            # Adaptive lighting normalization & contrast enhancement
+            img_gray = working_img.convert("L")
+            contrast_enhancer = ImageEnhance.Contrast(img_gray)
+            img_contrast = contrast_enhancer.enhance(1.35)
+            sharpness_enhancer = ImageEnhance.Sharpness(img_contrast)
+            img_sharp = sharpness_enhancer.enhance(1.8)
+            
             buf = io.BytesIO()
-            # Normalize to 2048px max dimension for fast transmission and clear notation
-            w, h = image.size
-            if max(w, h) > 2048:
-                scale = 2048.0 / max(w, h)
-                thumb = image.resize((int(w * scale), int(h * scale)), Image.Resampling.LANCZOS)
+            # Normalize to 3000px max dimension matching Swift high-res capacity
+            w, h = img_sharp.size
+            if max(w, h) > 3000:
+                scale = 3000.0 / max(w, h)
+                thumb = img_sharp.resize((int(w * scale), int(h * scale)), Image.Resampling.LANCZOS)
             else:
-                thumb = image
-            thumb.save(buf, format="JPEG", quality=92)
+                thumb = img_sharp
+            thumb.save(buf, format="JPEG", quality=95)
             img_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
             
             prompt = (
@@ -340,7 +453,8 @@ def run_cloud_ai_transcription(
                 "6. Grand Staff Polyphony: In each measure, specify all staff 1 (treble, voice 1) notes and rests first. Then write <backup><duration>STAFF_1_TOTAL_DIVISIONS</duration></backup> (for example in 4/4 with divisions=4, write <backup><duration>16</duration></backup>), followed by all staff 2 (bass, voice 2) notes and rests. Every note and rest must specify <staff>1</staff> or <staff>2</staff>.\n"
                 "7. Chords: When multiple notes sound together at the exact same beat on the same staff, the first note is standard and every subsequent simultaneous note MUST include <chord/> with identical <duration> and <staff>.\n"
                 "8. Measures & Ties: Number measures sequentially starting at 1 (<measure number=\"1\">). Encode tied notes with <tie type=\"start\"/> / <tie type=\"stop\"/> and <notations><tied type=\"start\"/></notations>.\n"
-                "9. Output Format: Output ONLY raw valid XML starting with <?xml version=\"1.0\" encoding=\"UTF-8\"?> and ending with </score-partwise>. Do NOT include markdown formatting, code fences (```), commentary, or conversational text."
+                "9. Output Format: Output ONLY raw valid XML starting with <?xml version=\"1.0\" encoding=\"UTF-8\"?> and ending with </score-partwise>. Do NOT include markdown formatting, code fences (```), commentary, or conversational text.\n"
+                "10. Page Layout: If you see multiple systems of music stacked vertically, transcribe ALL of them in sequence. Do not stop after the first line or system."
             )
             
             payload = {
@@ -357,45 +471,57 @@ def run_cloud_ai_transcription(
                 }],
                 "generationConfig": {
                     "temperature": 0.05,
-                    "maxOutputTokens": 8192
+                    "maxOutputTokens": 32768,
+                    "thinkingConfig": {
+                        "thinkingBudget": 1024
+                    }
                 }
             }
             
             for candidate in models_to_try:
-                try:
-                    logger.info(f"Invoking Google Gemini Cloud AI OMR engine with model '{candidate}'...")
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{candidate}:generateContent?key={active_gemini_key}"
-                    req = urllib.request.Request(
-                        url,
-                        data=json.dumps(payload).encode("utf-8"),
-                        headers={"Content-Type": "application/json"},
-                        method="POST"
-                    )
-                    with urllib.request.urlopen(req, timeout=35) as resp:
-                        data = json.loads(resp.read().decode("utf-8"))
-                        candidates = data.get("candidates", [])
-                        if candidates:
-                            parts = candidates[0].get("content", {}).get("parts", [])
-                            if parts:
-                                raw_text = parts[0].get("text", "").strip()
-                                # Clean markdown code fences if present
-                                if "```xml" in raw_text:
-                                    raw_text = raw_text.split("```xml", 1)[1].split("```", 1)[0].strip()
-                                elif "```" in raw_text:
-                                    raw_text = raw_text.split("```", 1)[1].split("```", 1)[0].strip()
-                                if "<score-partwise" in raw_text:
-                                    start_idx = raw_text.find("<?xml")
-                                    if start_idx == -1:
-                                        start_idx = raw_text.find("<score-partwise")
-                                    end_idx = raw_text.rfind("</score-partwise>")
-                                    if end_idx != -1:
-                                        raw_text = raw_text[start_idx:end_idx + len("</score-partwise>")].strip()
-                                    # Validate xml structure
-                                    ET.fromstring(raw_text)
-                                    logger.info(f"Gemini Cloud AI OMR ({candidate}) transcribed {len(raw_text)} bytes of MusicXML.")
-                                    return raw_text
-                except Exception as candidate_err:
-                    logger.warning(f"Gemini model '{candidate}' failed: {candidate_err}")
+                max_retries = 3
+                base_delay = 1.0
+                for attempt in range(max_retries + 1):
+                    try:
+                        logger.info(f"Invoking Google Gemini Cloud AI OMR engine with model '{candidate}' (attempt {attempt + 1})...")
+                        url = f"https://generativelanguage.googleapis.com/v1beta/models/{candidate}:generateContent?key={active_gemini_key}"
+                        req = urllib.request.Request(
+                            url,
+                            data=json.dumps(payload).encode("utf-8"),
+                            headers={"Content-Type": "application/json"},
+                            method="POST"
+                        )
+                        with urllib.request.urlopen(req, timeout=90) as resp:
+                            data = json.loads(resp.read().decode("utf-8"))
+                            candidates = data.get("candidates", [])
+                            if candidates:
+                                parts = candidates[0].get("content", {}).get("parts", [])
+                                if parts:
+                                    raw_text = parts[0].get("text", "").strip()
+                                    repaired_xml = repair_truncated_musicxml(raw_text)
+                                    if repaired_xml:
+                                        ET.fromstring(repaired_xml)
+                                        logger.info(f"Gemini Cloud AI OMR ({candidate}) transcribed {len(repaired_xml)} bytes of MusicXML.")
+                                        return repaired_xml
+                        break  # Successful response, exit retry loop
+                    except urllib.error.HTTPError as http_err:
+                        if http_err.code in (429, 503) and attempt < max_retries:
+                            jitter = random.uniform(0.1, 0.5)
+                            sleep_time = base_delay + jitter
+                            logger.warning(f"Gemini {candidate} returned HTTP {http_err.code}. Retrying in {sleep_time:.2f}s...")
+                            time.sleep(sleep_time)
+                            base_delay *= 2.0
+                            continue
+                        logger.warning(f"Gemini model '{candidate}' HTTP error {http_err.code}: {http_err}")
+                        break
+                    except Exception as candidate_err:
+                        if attempt < max_retries:
+                            jitter = random.uniform(0.1, 0.5)
+                            time.sleep(base_delay + jitter)
+                            base_delay *= 2.0
+                            continue
+                        logger.warning(f"Gemini model '{candidate}' failed: {candidate_err}")
+                        break
         except Exception as e:
             logger.warning(f"Gemini Cloud AI OMR setup failed: {e}")
             

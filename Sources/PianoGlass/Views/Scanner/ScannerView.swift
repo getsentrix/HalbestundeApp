@@ -17,6 +17,9 @@ import VisionKit
 #if canImport(UIKit)
 import UIKit
 #endif
+#if os(iOS) && canImport(CoreMotion)
+import CoreMotion
+#endif
 
 #if canImport(UIKit)
 public extension UIImage {
@@ -47,14 +50,100 @@ public struct ScannerView: View {
     @State private var showCameraDocumentScanner: Bool = false
     @State private var showFileImporter: Bool = false
     
+    #if os(iOS) && canImport(CoreMotion)
+    @State private var motionManager: CMMotionManager? = nil
+    #endif
+    
     public init(onScoreAccepted: @escaping (Score) -> Void) {
         self.onScoreAccepted = onScoreAccepted
         self._viewModel = StateObject(wrappedValue: ScannerViewModel(onScoreAccepted: onScoreAccepted))
     }
     
+    // MARK: - Viewfinder Guidance Computed Helpers
+    
+    private var lightingColor: Color {
+        if viewModel.currentLuminance < 0.30 {
+            return .orange
+        } else if viewModel.currentLuminance > 0.95 {
+            return .orange
+        } else {
+            return .green
+        }
+    }
+    
+    private var lightingLabel: String {
+        if viewModel.currentLuminance < 0.30 {
+            return "Too Dark • Increase Light"
+        } else if viewModel.currentLuminance > 0.95 {
+            return "High Glare • Angle Camera"
+        } else {
+            return "Lighting Optimal"
+        }
+    }
+    
+    private var lightingIcon: String {
+        if viewModel.currentLuminance < 0.30 {
+            return "moon.fill"
+        } else if viewModel.currentLuminance > 0.95 {
+            return "sun.max.trianglebadge.exclamationmark.fill"
+        } else {
+            return "sun.max.fill"
+        }
+    }
+    
+    private var levelIsAligned: Bool {
+        abs(viewModel.currentTiltDegrees) <= 12.0
+    }
+    
+    private var tiltLabel: String {
+        if levelIsAligned {
+            return String(format: "%.1f° Level", abs(viewModel.currentTiltDegrees))
+        } else {
+            return String(format: "Tilt: %.1f° • Hold Parallel", abs(viewModel.currentTiltDegrees))
+        }
+    }
+    
+    private var bubbleOffset: CGSize {
+        let maxOffset: CGFloat = 26.0
+        let factor: CGFloat = 2.2
+        let offsetVal = CGFloat(viewModel.currentTiltDegrees) * factor
+        return CGSize(
+            width: min(maxOffset, max(-maxOffset, offsetVal)),
+            height: min(maxOffset, max(-maxOffset, offsetVal * 0.7))
+        )
+    }
+    
+    private var distanceColor: Color {
+        if viewModel.currentFillRatio < 0.70 || viewModel.currentFillRatio > 0.98 {
+            return .orange
+        } else {
+            return .green
+        }
+    }
+    
+    private var distanceLabel: String {
+        if viewModel.currentFillRatio < 0.70 {
+            return "Move Closer (Target 70%+)"
+        } else if viewModel.currentFillRatio > 0.98 {
+            return "Move Back (Score Touches Edge)"
+        } else {
+            return "Ideal Distance (Score in Frame)"
+        }
+    }
+    
+    private var distanceIcon: String {
+        if viewModel.currentFillRatio < 0.70 {
+            return "arrow.up.left.and.arrow.down.right"
+        } else if viewModel.currentFillRatio > 0.98 {
+            return "arrow.down.right.and.arrow.up.left"
+        } else {
+            return "checkmark.circle.fill"
+        }
+    }
+    
     public var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
+            VStack(spacing: 20) {
                 // Viewfinder Frame
                 ZStack {
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
@@ -66,76 +155,126 @@ public struct ScannerView: View {
                         .overlay(
                             ViewfinderCornerBrackets()
                                 .stroke(Color.accentColor, lineWidth: 2.5)
-                                .padding(20)
+                                .padding(18)
                         )
                     
                     if viewModel.isProcessing {
-                        if viewModel.progressFraction >= 0.99, let score = viewModel.capturedScore {
-                            VStack(spacing: 14) {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .font(.system(size: 56))
-                                    .foregroundColor(.green)
+                        MultiStageProgressStepperView(viewModel: viewModel)
+                            .transition(.opacity)
+                    } else {
+                        // F11: Real-Time Guided Capture Overlay
+                        VStack(spacing: 0) {
+                            // Top HUD Bar: Lighting pill & Flash
+                            HStack {
+                                HStack(spacing: 6) {
+                                    Image(systemName: lightingIcon)
+                                        .font(.caption2)
+                                        .foregroundColor(lightingColor)
+                                    Text(lightingLabel)
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundColor(lightingColor)
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(lightingColor.opacity(0.16))
+                                .cornerRadius(12)
                                 
-                                VStack(spacing: 4) {
-                                    Text(score.title)
-                                        .font(.headline.weight(.bold))
-                                        .foregroundColor(.primary)
-                                        .multilineTextAlignment(.center)
-                                        .lineLimit(2)
+                                Spacer()
+                                
+                                Button(action: {
+                                    viewModel.flashEnabled.toggle()
+                                }) {
+                                    Image(systemName: viewModel.flashEnabled ? "bolt.fill" : "bolt.slash")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundColor(viewModel.flashEnabled ? .yellow : .secondary)
+                                        .padding(6)
+                                        .background(Color(.tertiarySystemBackground))
+                                        .clipShape(Circle())
+                                }
+                            }
+                            .padding(.top, 14)
+                            .padding(.horizontal, 16)
+                            
+                            Spacer()
+                            
+                            // Center: Level Reticle & Orientation Indicator
+                            VStack(spacing: 8) {
+                                ZStack {
+                                    Circle()
+                                        .stroke(levelIsAligned ? Color.green.opacity(0.8) : Color.orange.opacity(0.8), lineWidth: 2)
+                                        .frame(width: 70, height: 70)
                                     
-                                    Text("Transcription complete • Opening player...")
-                                        .font(.subheadline)
+                                    Rectangle()
+                                        .fill(levelIsAligned ? Color.green.opacity(0.4) : Color.secondary.opacity(0.3))
+                                        .frame(width: 48, height: 1)
+                                    Rectangle()
+                                        .fill(levelIsAligned ? Color.green.opacity(0.4) : Color.secondary.opacity(0.3))
+                                        .frame(width: 1, height: 48)
+                                    
+                                    Circle()
+                                        .fill(levelIsAligned ? Color.green : Color.orange)
+                                        .frame(width: 14, height: 14)
+                                        .offset(bubbleOffset)
+                                }
+                                
+                                HStack(spacing: 6) {
+                                    Image(systemName: levelIsAligned ? "checkmark.circle.fill" : "gyroscope")
+                                        .font(.caption2)
+                                        .foregroundColor(levelIsAligned ? .green : .orange)
+                                    Text(tiltLabel)
+                                        .font(.caption2.monospacedDigit().weight(.semibold))
+                                        .foregroundColor(levelIsAligned ? .green : .orange)
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color(.tertiarySystemBackground).opacity(0.9))
+                                .cornerRadius(8)
+                            }
+                            
+                            Spacer()
+                            
+                            // Bottom: Distance & Fill Ratio Indicator and Guidance Message
+                            VStack(spacing: 6) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: distanceIcon)
+                                        .font(.caption2)
+                                        .foregroundColor(distanceColor)
+                                    Text(distanceLabel)
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundColor(distanceColor)
+                                    Spacer()
+                                    Text("\(Int(viewModel.currentFillRatio * 100))% Fill")
+                                        .font(.caption2.monospacedDigit())
                                         .foregroundColor(.secondary)
                                 }
-                                .padding(.horizontal, 24)
-                            }
-                            .transition(.scale.combined(with: .opacity))
-                        } else {
-                            VStack(spacing: 16) {
-                                ProgressView(value: max(0.05, viewModel.progressFraction))
-                                    .progressViewStyle(.linear)
-                                    .tint(Color.accentColor)
-                                    .frame(width: 220)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 4)
+                                .background(distanceColor.opacity(0.14))
+                                .cornerRadius(8)
                                 
-                                HStack(spacing: 8) {
-                                    ProgressView()
-                                        .scaleEffect(0.9)
-                                    Text("\(Int(viewModel.progressFraction * 100))%")
-                                        .font(.subheadline.monospacedDigit().weight(.bold))
-                                        .foregroundColor(.accentColor)
+                                HStack(spacing: 6) {
+                                    Image(systemName: viewModel.currentGuidanceState.systemIcon)
+                                        .font(.caption2)
+                                        .foregroundColor(viewModel.currentGuidanceState == .readyToCapture ? .green : .orange)
+                                    Text(viewModel.currentGuidanceState.message)
+                                        .font(.caption2.weight(.medium))
+                                        .foregroundColor(.primary)
+                                        .lineLimit(1)
+                                    Spacer()
                                 }
-                                
-                                Text(viewModel.statusMessage)
-                                    .font(.subheadline.weight(.medium))
-                                    .foregroundColor(.primary)
-                                    .multilineTextAlignment(.center)
-                                    .padding(.horizontal, 28)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Color(.tertiarySystemBackground).opacity(0.95))
+                                .cornerRadius(8)
                             }
-                            .transition(.opacity)
-                        }
-                    } else {
-                        VStack(spacing: 14) {
-                            Image(systemName: "doc.viewfinder")
-                                .font(.system(size: 60))
-                                .foregroundColor(.secondary.opacity(0.6))
-                            
-                            VStack(spacing: 4) {
-                                Text("Sheet Music Viewfinder")
-                                    .font(.headline)
-                                    .foregroundColor(.primary)
-                                
-                                Text("Scan printed notation or import MusicXML & photos")
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
-                                    .multilineTextAlignment(.center)
-                                    .padding(.horizontal, 24)
-                            }
+                            .padding(.bottom, 12)
+                            .padding(.horizontal, 16)
                         }
                     }
                 }
-                .frame(maxHeight: 340)
+                .frame(maxHeight: 380)
                 .padding(.horizontal, 20)
-                .padding(.top, 12)
+                .padding(.top, 8)
                 
                 // Scanner Action Deck
                 VStack(spacing: 12) {
@@ -258,9 +397,17 @@ public struct ScannerView: View {
             }
             .onAppear {
                 viewModel.onScoreAccepted = onScoreAccepted
-                if !viewModel.isProcessing {
+                if !viewModel.isProcessing && !viewModel.showReviewSheet {
                     viewModel.retake()
                 }
+                #if os(iOS) && canImport(CoreMotion)
+                startMotionUpdates()
+                #endif
+            }
+            .onDisappear {
+                #if os(iOS) && canImport(CoreMotion)
+                stopMotionUpdates()
+                #endif
             }
             #if os(iOS) && canImport(VisionKit)
             .sheet(isPresented: $showCameraDocumentScanner) {
@@ -284,18 +431,81 @@ public struct ScannerView: View {
                 .ignoresSafeArea()
             }
             #endif
+            // F14: Scan Review & Confirmation Sheet
+            .sheet(isPresented: $viewModel.showReviewSheet) {
+                if let result = viewModel.activeScanResult {
+                    ScanReviewSheet(
+                        scanResult: result,
+                        onAccept: {
+                            viewModel.acceptScanResult(result)
+                        },
+                        onRetake: {
+                            viewModel.retakeFromReview()
+                        }
+                    )
+                }
+            }
+            // F13: Detailed Diagnostics Sheet
+            .sheet(isPresented: $viewModel.showDetailedDiagnostics) {
+                if let diagnostic = viewModel.lastDiagnostic {
+                    ScanDiagnosticSheet(
+                        diagnostic: diagnostic,
+                        onPlayFallback: {
+                            if let fallback = diagnostic.fallbackScore {
+                                viewModel.acceptFallbackScore(fallback)
+                            }
+                        },
+                        onRetake: {
+                            viewModel.retake()
+                        }
+                    )
+                }
+            }
+            // F13: Diagnostic Failure Dialog
             .alert("Scan & Import Notice", isPresented: $viewModel.showErrorAlert) {
                 if let fallback = viewModel.pendingFallbackScore {
                     Button("Play Practice Score") {
                         viewModel.acceptFallbackScore(fallback)
                     }
                 }
-                Button("OK", role: .cancel) {}
+                Button("Retake Scan") {
+                    viewModel.retake()
+                }
+                Button("View Details") {
+                    viewModel.showDetailedDiagnostics = true
+                }
+                Button("Cancel", role: .cancel) {}
             } message: {
                 Text(viewModel.errorMessage)
             }
         }
     }
+    
+    #if os(iOS) && canImport(CoreMotion)
+    private func startMotionUpdates() {
+        let manager = CMMotionManager()
+        if manager.isDeviceMotionAvailable {
+            manager.deviceMotionUpdateInterval = 0.1
+            manager.startDeviceMotionUpdates(to: .main) { motion, _ in
+                guard let motion = motion else { return }
+                let pitch = motion.attitude.pitch * 180.0 / .pi
+                let roll = motion.attitude.roll * 180.0 / .pi
+                let totalTilt = Float(sqrt(pitch * pitch + roll * roll))
+                viewModel.updateViewfinderGuidance(
+                    luminance: viewModel.currentLuminance,
+                    fillRatio: viewModel.currentFillRatio,
+                    tiltDegrees: totalTilt
+                )
+            }
+            self.motionManager = manager
+        }
+    }
+    
+    private func stopMotionUpdates() {
+        motionManager?.stopDeviceMotionUpdates()
+        motionManager = nil
+    }
+    #endif
 }
 
 // MARK: - Viewfinder Corner Reticle Brackets
@@ -334,6 +544,9 @@ public struct ScanReviewSheet: View {
     let onAccept: () -> Void
     let onRetake: () -> Void
     @Environment(\.dismiss) private var dismiss
+    
+    @StateObject private var previewScheduler = AudioScheduler()
+    @State private var isPlayingPreview: Bool = false
     
     public init(scanResult: ScanResult, onAccept: @escaping () -> Void, onRetake: @escaping () -> Void) {
         self.scanResult = scanResult
@@ -374,8 +587,39 @@ public struct ScanReviewSheet: View {
                     LabeledContent("Confidence", value: "\(Int(scanResult.confidence.overallConfidence * 100))%")
                 }
                 
+                Section("Audio Preview") {
+                    HStack(spacing: 14) {
+                        Button(action: {
+                            if isPlayingPreview {
+                                previewScheduler.pause()
+                                isPlayingPreview = false
+                            } else {
+                                previewScheduler.play()
+                                isPlayingPreview = true
+                            }
+                        }) {
+                            Image(systemName: isPlayingPreview ? "pause.circle.fill" : "play.circle.fill")
+                                .font(.system(size: 36))
+                                .foregroundColor(.accentColor)
+                        }
+                        .buttonStyle(.plain)
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(isPlayingPreview ? "Playing score preview..." : "Listen to Transcription")
+                                .font(.subheadline.weight(.semibold))
+                            Text("\(scanResult.recognizedScore.measures.count) measures • \(Int(scanResult.recognizedScore.defaultBPM)) BPM")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        Spacer()
+                    }
+                    .padding(.vertical, 4)
+                }
+                
                 Section {
                     Button(action: {
+                        previewScheduler.stop()
                         dismiss()
                         onAccept()
                     }) {
@@ -390,6 +634,7 @@ public struct ScanReviewSheet: View {
                     .foregroundColor(.white)
                     
                     Button("Scan Another") {
+                        previewScheduler.stop()
                         dismiss()
                         onRetake()
                     }
@@ -402,11 +647,215 @@ public struct ScanReviewSheet: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") {
+                        previewScheduler.stop()
                         dismiss()
                         onRetake()
                     }
                 }
             }
+            .onAppear {
+                previewScheduler.loadScore(scanResult.recognizedScore)
+            }
+            .onDisappear {
+                previewScheduler.stop()
+                isPlayingPreview = false
+            }
+        }
+    }
+}
+
+// MARK: - F13: Scan Diagnostic Sheet
+public struct ScanDiagnosticSheet: View {
+    let diagnostic: ScanDiagnostic
+    let onPlayFallback: () -> Void
+    let onRetake: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    
+    public init(
+        diagnostic: ScanDiagnostic,
+        onPlayFallback: @escaping () -> Void,
+        onRetake: @escaping () -> Void
+    ) {
+        self.diagnostic = diagnostic
+        self.onPlayFallback = onPlayFallback
+        self.onRetake = onRetake
+    }
+    
+    public var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 10) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.title)
+                                .foregroundColor(.orange)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Scan Diagnostics")
+                                    .font(.headline)
+                                Text("Analysis details for notation recovery")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        
+                        Text(diagnostic.failureReason)
+                            .font(.subheadline)
+                            .foregroundColor(.primary)
+                            .padding(.top, 4)
+                    }
+                    .padding(.vertical, 4)
+                }
+                
+                Section("Diagnostic Telemetry") {
+                    LabeledContent("Lighting Quality", value: diagnostic.lightingQuality.capitalized)
+                    LabeledContent("Staff Systems Found", value: "\(diagnostic.staffCount)")
+                    LabeledContent("API / Engine Status", value: diagnostic.apiStatus)
+                    LabeledContent("Error Category", value: diagnostic.errorCategory.capitalized)
+                }
+                
+                Section("Suggested Action") {
+                    HStack(spacing: 10) {
+                        Image(systemName: "lightbulb.fill")
+                            .foregroundColor(.accentColor)
+                        Text(diagnostic.suggestedAction)
+                            .font(.subheadline)
+                            .foregroundColor(.primary)
+                    }
+                    .padding(.vertical, 4)
+                }
+                
+                Section {
+                    if let _ = diagnostic.fallbackScore {
+                        Button(action: {
+                            dismiss()
+                            onPlayFallback()
+                        }) {
+                            HStack {
+                                Spacer()
+                                Label("Play Practice Score", systemImage: "play.circle.fill")
+                                    .font(.headline)
+                                Spacer()
+                            }
+                        }
+                        .listRowBackground(Color.accentColor)
+                        .foregroundColor(.white)
+                    }
+                    
+                    Button("Retake Scan") {
+                        dismiss()
+                        onRetake()
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle("Diagnostics")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - F12: Multi-Stage Progress Stepper View
+public struct MultiStageProgressStepperView: View {
+    @ObservedObject var viewModel: ScannerViewModel
+    
+    public init(viewModel: ScannerViewModel) {
+        self.viewModel = viewModel
+    }
+    
+    public var body: some View {
+        VStack(spacing: 14) {
+            // Stage Items
+            VStack(spacing: 8) {
+                ForEach(ProgressStage.allCases) { stage in
+                    HStack(spacing: 12) {
+                        ZStack {
+                            Circle()
+                                .fill(circleColor(for: stage))
+                                .frame(width: 24, height: 24)
+                            
+                            if stage.rawValue < viewModel.currentStage.rawValue || (stage == .audioReady && viewModel.progressFraction >= 0.99) {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(.white)
+                            } else if stage == viewModel.currentStage {
+                                ProgressView()
+                                    .progressViewStyle(.circular)
+                                    .scaleEffect(0.65)
+                                    .tint(.white)
+                            } else {
+                                Text("\(stage.rawValue)")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(stage.title)
+                                .font(.system(size: 12, weight: stage == viewModel.currentStage ? .bold : .medium))
+                                .foregroundColor(stage.rawValue <= viewModel.currentStage.rawValue ? .primary : .secondary)
+                            
+                            Text(stage.description)
+                                .font(.system(size: 10))
+                                .foregroundColor(stage == viewModel.currentStage ? .accentColor : .secondary.opacity(0.8))
+                        }
+                        
+                        Spacer()
+                    }
+                    .padding(.horizontal, 14)
+                }
+            }
+            .padding(.vertical, 8)
+            .background(Color(.tertiarySystemBackground).opacity(0.8))
+            .cornerRadius(12)
+            
+            // Monotonic Progress Bar & Percent
+            VStack(spacing: 4) {
+                ProgressView(value: max(0.05, viewModel.progressFraction))
+                    .progressViewStyle(.linear)
+                    .tint(Color.accentColor)
+                
+                HStack {
+                    Text(viewModel.statusMessage)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                    
+                    Spacer()
+                    
+                    Text("\(Int(viewModel.progressFraction * 100))%")
+                        .font(.caption2.monospacedDigit().weight(.bold))
+                        .foregroundColor(.accentColor)
+                }
+            }
+            .padding(.horizontal, 12)
+            
+            Button(role: .cancel, action: {
+                viewModel.retake()
+            }) {
+                Text("Cancel Recognition")
+                    .font(.caption2.weight(.medium))
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(.horizontal, 10)
+    }
+    
+    private func circleColor(for stage: ProgressStage) -> Color {
+        if stage.rawValue < viewModel.currentStage.rawValue || (stage == .audioReady && viewModel.progressFraction >= 0.99) {
+            return .green
+        } else if stage == viewModel.currentStage {
+            return Color.accentColor
+        } else {
+            return Color(.systemFill)
         }
     }
 }

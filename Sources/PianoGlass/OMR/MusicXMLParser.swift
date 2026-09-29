@@ -3,12 +3,18 @@
 //  PianoGlass
 //
 //  XML parser for MusicXML partwise sheet music files.
-//  Supports multi-staff (grand staff piano), chords, backup/forward, and key/time signatures.
+//  Supports polyphonic grand staff piano, multiple voices per staff,
+//  accurate <backup>/<forward> timelines, chords, accidentals, and octave shifts.
 //
 
 import Foundation
 
 public final class MusicXMLParser: NSObject, XMLParserDelegate {
+    private struct VoiceKey: Hashable {
+        let staff: Int
+        let voice: Int
+    }
+    
     private var scoreTitle: String = "Untitled Score"
     private var composer: String = "Unknown Composer"
     private var divisions: Int = 4
@@ -24,12 +30,23 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
     private var currentMeasureNotes = [NoteEvent]()
     private var measureAccidentals: [String: Int] = [:]
     
-    // Timeline tracking inside measure
-    private var globalMeasureTicks: Int = 0
-    private var staffTickCursors: [Int: Int] = [:]
+    // Polyphonic grand-staff timeline tracking per (staff, voice) and part cursor
+    private var partTimelineTick: Int = 0
+    private var voiceCursors: [VoiceKey: Int] = [:]
+    private var lastVoiceNoteStartTicks: [VoiceKey: Int] = [:]
+    private var lastNoteStartTicks: Int = 0
+    private var stavesSeenInMeasure = Set<Int>()
+    private var backupsCountInMeasure: Int = 0
+    
     private var inBackup: Bool = false
     private var inForward: Bool = false
     private var backupForwardTicks: Int = 0
+    
+    // Direction & Clef state
+    private var staffClefs: [Int: Clef] = [1: .treble, 2: .bass]
+    private var staffOctaveShift: [Int: Int] = [:]
+    private var currentClefNumber: Int = 1
+    private var currentClefSign: String = ""
     
     // In-measure note building state
     private var inNote: Bool = false
@@ -38,6 +55,7 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
     private var isTieStart: Bool = false
     private var isTieStop: Bool = false
     private var hasExplicitAlter: Bool = false
+    private var hasExplicitStaff: Bool = false
     private var currentNoteType: String = ""
     private var currentStep: String = "C"
     private var currentOctave: Int = 4
@@ -46,10 +64,8 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
     private var currentDurationTicks: Int = 4
     private var currentStaffNumber: Int = 1
     private var currentVoice: Int = 1
-    private var lastNoteStartTicks: Int = 0
-    private var lastStaffNoteStartTicks: [Int: Int] = [:]
     
-    // Key: "Step-Staff" e.g. "F#-1" to properly track accidentals per staff
+    // Key: "Step-Staff" e.g. "F-1" to properly track accidentals per staff
     private var measureAccidentalsByStaff: [String: Int] = [:]
     
     public override init() {
@@ -70,8 +86,13 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
         measureAccidentalsByStaff.removeAll()
         currentMeasureIndex = 0
         currentMeasureBeatStart = 0.0
-        globalMeasureTicks = 0
-        staffTickCursors = [:]
+        partTimelineTick = 0
+        voiceCursors.removeAll()
+        lastVoiceNoteStartTicks.removeAll()
+        stavesSeenInMeasure.removeAll()
+        backupsCountInMeasure = 0
+        staffClefs = [1: .treble, 2: .bass]
+        staffOctaveShift.removeAll()
         scoreTitle = "Untitled Score"
         composer = "Unknown Composer"
         divisions = 4
@@ -79,7 +100,7 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
         keySignature = KeySignature(fifths: 0, mode: "major")
         
         let success = parser.parse()
-        guard success else {
+        guard success, !measures.isEmpty else {
             return nil
         }
         
@@ -95,7 +116,16 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
     
     public func parse(xmlString: String) -> Score? {
         guard let data = xmlString.data(using: .utf8) else { return nil }
-        return parse(xmlData: data)
+        if let score = parse(xmlData: data) {
+            return score
+        }
+        
+        // Self-healing fallback: repair truncated or malformed XML via MusicXMLRepairEngine
+        let repaired = MusicXMLRepairEngine.repairTruncatedXML(xmlString)
+        if !repaired.isEmpty, repaired != xmlString, let repairedData = repaired.data(using: .utf8) {
+            return parse(xmlData: repairedData)
+        }
+        return nil
     }
     
     // MARK: - XMLParserDelegate
@@ -114,12 +144,42 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
             currentMeasureNotes = []
             measureAccidentals.removeAll()
             measureAccidentalsByStaff.removeAll()
-            globalMeasureTicks = 0
-            staffTickCursors = [1: 0, 2: 0]
-            lastStaffNoteStartTicks = [1: 0, 2: 0]
+            partTimelineTick = 0
+            voiceCursors.removeAll()
+            lastVoiceNoteStartTicks.removeAll()
+            stavesSeenInMeasure.removeAll()
+            backupsCountInMeasure = 0
             lastNoteStartTicks = 0
             if let numStr = attributeDict["number"], let num = Int(numStr) {
                 currentMeasureIndex = max(0, num - 1)
+            }
+        } else if elementName == "clef" {
+            if let numStr = attributeDict["number"], let n = Int(numStr) {
+                currentClefNumber = n
+            } else {
+                currentClefNumber = 1
+            }
+            currentClefSign = ""
+        } else if elementName == "octave-shift" {
+            let shiftType = attributeDict["type"] ?? "stop"
+            let size = Int(attributeDict["size"] ?? "8") ?? 8
+            let octaves = size >= 15 ? 2 : 1
+            let staffNum = Int(attributeDict["staff"] ?? "0") ?? 0
+            
+            let shiftVal: Int
+            if shiftType == "up" {
+                shiftVal = octaves
+            } else if shiftType == "down" {
+                shiftVal = -octaves
+            } else {
+                shiftVal = 0
+            }
+            
+            if staffNum > 0 {
+                staffOctaveShift[staffNum] = shiftVal
+            } else {
+                staffOctaveShift[1] = shiftVal
+                staffOctaveShift[2] = shiftVal
             }
         } else if elementName == "note" {
             inNote = true
@@ -128,6 +188,7 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
             isTieStart = false
             isTieStop = false
             hasExplicitAlter = false
+            hasExplicitStaff = false
             currentNoteType = ""
             currentStep = "C"
             currentOctave = 4
@@ -187,6 +248,15 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
             if !currentText.isEmpty {
                 keySignature = KeySignature(fifths: keySignature.fifths, mode: currentText)
             }
+        case "sign":
+            currentClefSign = currentText.uppercased()
+            if currentClefSign == "F" {
+                staffClefs[currentClefNumber] = .bass
+            } else if currentClefSign == "G" {
+                staffClefs[currentClefNumber] = .treble
+            } else if currentClefSign == "C" {
+                staffClefs[currentClefNumber] = .alto
+            }
         case "type":
             currentNoteType = currentText.lowercased()
         case "step":
@@ -194,8 +264,6 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
         case "octave":
             if let oct = Int(currentText) { currentOctave = oct }
         case "alter":
-            // MusicXML alter can be float (e.g. 0.5 for quarter-tones) or int (-1, 0, 1, 2)
-            // We round to nearest semitone for playback
             if let altDouble = Double(currentText) {
                 currentAlterDouble = altDouble
                 currentAlter = Int(altDouble.rounded())
@@ -218,30 +286,22 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
                 }
             }
         case "staff":
-            if let st = Int(currentText) { currentStaffNumber = st }
+            if let st = Int(currentText) {
+                currentStaffNumber = st
+                hasExplicitStaff = true
+            }
         case "voice":
             if let vc = Int(currentText) { currentVoice = vc }
             
         case "backup":
-            globalMeasureTicks = max(0, globalMeasureTicks - backupForwardTicks)
-            for (st, cur) in staffTickCursors {
-                staffTickCursors[st] = max(0, cur - backupForwardTicks)
-            }
-            for (st, cur) in lastStaffNoteStartTicks {
-                lastStaffNoteStartTicks[st] = max(0, cur - backupForwardTicks)
-            }
-            lastNoteStartTicks = max(0, lastNoteStartTicks - backupForwardTicks)
+            // MusicXML specification: <backup> moves the part's time coordinate backward
+            // along the measure timeline for polyphonic voices and multi-staff parts.
+            partTimelineTick = max(0, partTimelineTick - backupForwardTicks)
+            backupsCountInMeasure += 1
             inBackup = false
             
         case "forward":
-            globalMeasureTicks += backupForwardTicks
-            for (st, cur) in staffTickCursors {
-                staffTickCursors[st] = cur + backupForwardTicks
-            }
-            for (st, cur) in lastStaffNoteStartTicks {
-                lastStaffNoteStartTicks[st] = cur + backupForwardTicks
-            }
-            lastNoteStartTicks += backupForwardTicks
+            partTimelineTick += backupForwardTicks
             inForward = false
             
         case "note":
@@ -265,46 +325,63 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
                 effectiveTicks = max(1, divisions)
             }
             
+            // Automatic staff & hand deduction if <staff> tag was omitted
+            if !hasExplicitStaff {
+                if currentVoice >= 2 && currentOctave <= 3 {
+                    currentStaffNumber = 2
+                } else if staffClefs[1] == .bass {
+                    currentStaffNumber = 2
+                } else {
+                    currentStaffNumber = 1
+                }
+            }
+            
+            // Recover from malformed XML where secondary staff omitted <backup>
+            if !stavesSeenInMeasure.contains(currentStaffNumber) && backupsCountInMeasure == 0 && currentStaffNumber > 1 && partTimelineTick > 0 {
+                partTimelineTick = 0
+            }
+            stavesSeenInMeasure.insert(currentStaffNumber)
+            
+            let voiceKey = VoiceKey(staff: currentStaffNumber, voice: currentVoice)
+            
             // Resolve chromatic alteration: explicit accidental vs per-staff measure memory vs key signature
-            // Key includes both step and staff number to avoid cross-staff contamination (e.g. treble F# vs bass F)
             let accidentalKey = "\(currentStep)-\(currentStaffNumber)"
             if !hasExplicitAlter {
                 if let remembered = measureAccidentalsByStaff[accidentalKey] {
                     currentAlter = remembered
                 } else if let legacyRemembered = measureAccidentals[currentStep] {
-                    // Fall back to old per-step memory for backwards compatibility
                     currentAlter = legacyRemembered
                 } else {
                     currentAlter = keySignatureAlter(step: currentStep, fifths: keySignature.fifths)
                 }
             } else {
-                // Natural sign explicitly cancels key signature accidentals within this measure
                 measureAccidentalsByStaff[accidentalKey] = currentAlter
                 measureAccidentals[currentStep] = currentAlter
             }
             
-            let durationBeats = max(0.125, Double(effectiveTicks) / Double(max(1, divisions)))
+            let durationBeats = max(0.0625, Double(effectiveTicks) / Double(max(1, divisions)))
             let hand: Hand = (currentStaffNumber >= 2) ? .left : .right
             let accidental: Accidental?
             if currentAlter == 1 { accidental = .sharp }
             else if currentAlter == -1 { accidental = .flat }
             else if currentAlter == 2 { accidental = .doubleSharp }
             else if currentAlter == -2 { accidental = .doubleFlat }
-            else { accidental = nil }
+            else { accidental = hasExplicitAlter ? .natural : nil }
             
-            let pitch = Pitch(name: currentStep, octave: currentOctave, accidental: accidental ?? .natural)
+            let octaveShift = staffOctaveShift[currentStaffNumber] ?? 0
+            let effectiveOctave = max(0, min(8, currentOctave + octaveShift))
+            let pitch = Pitch(name: currentStep, octave: effectiveOctave, accidental: accidental ?? .natural)
             
-            // Calculate start tick: if chord, same as previous note on this staff; else staff cursor
+            // Calculate start tick: chords share previous note's start; non-chords advance part timeline
             let noteStartTick: Int
             if isChordNote {
-                noteStartTick = lastStaffNoteStartTicks[currentStaffNumber] ?? lastNoteStartTicks
+                noteStartTick = lastVoiceNoteStartTicks[voiceKey] ?? lastNoteStartTicks
             } else {
-                let staffCursor = staffTickCursors[currentStaffNumber] ?? 0
-                noteStartTick = staffCursor
-                lastStaffNoteStartTicks[currentStaffNumber] = noteStartTick
+                noteStartTick = partTimelineTick
+                lastVoiceNoteStartTicks[voiceKey] = noteStartTick
                 lastNoteStartTicks = noteStartTick
-                staffTickCursors[currentStaffNumber] = staffCursor + effectiveTicks
-                globalMeasureTicks = max(globalMeasureTicks, staffCursor + effectiveTicks)
+                partTimelineTick += effectiveTicks
+                voiceCursors[voiceKey] = partTimelineTick
             }
             
             let noteStartBeatWithinMeasure = Double(noteStartTick) / Double(max(1, divisions))
@@ -324,21 +401,16 @@ public final class MusicXMLParser: NSObject, XMLParserDelegate {
             inNote = false
             
         case "measure":
+            let maxEnd = currentMeasureNotes.map { ($0.startBeat - currentMeasureBeatStart) + $0.durationBeats }.max() ?? timeSignature.beatsPerMeasure
             let measureDuration: Double
             if measures.isEmpty && !currentMeasureNotes.isEmpty {
-                let maxEnd = currentMeasureNotes.map { ($0.startBeat - currentMeasureBeatStart) + $0.durationBeats }.max() ?? timeSignature.beatsPerMeasure
                 if maxEnd < timeSignature.beatsPerMeasure && maxEnd > 0 {
                     measureDuration = maxEnd
                 } else {
-                    measureDuration = timeSignature.beatsPerMeasure
+                    measureDuration = max(timeSignature.beatsPerMeasure, maxEnd)
                 }
             } else {
-                let maxEnd = currentMeasureNotes.map { ($0.startBeat - currentMeasureBeatStart) + $0.durationBeats }.max() ?? timeSignature.beatsPerMeasure
-                if maxEnd > timeSignature.beatsPerMeasure {
-                    measureDuration = maxEnd
-                } else {
-                    measureDuration = timeSignature.beatsPerMeasure
-                }
+                measureDuration = max(timeSignature.beatsPerMeasure, maxEnd)
             }
             
             let measure = Measure(
